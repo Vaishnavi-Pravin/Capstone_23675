@@ -1,0 +1,42 @@
+version: 2
+
+sources:
+
+  - name: external
+    description: >
+      Snowflake external tables sitting directly on top of the raw ADLS JSON
+      files. Read-only, file-based -- no loaded_at column exists here, so
+      freshness is checked one layer downstream at Bronze instead.
+    database: CT_VAISHNAVI_PRAVIN_DB
+    schema: EXTERNAL
+    tables:
+      - name: external_campaign
+      - name: external_customer
+      - name: external_product
+      - name: external_orders
+      - name: external_employee
+      - name: external_store
+      - name: external_supplier
+
+  - name: bronze
+    description: >
+      Raw, faithful landing copies of each source, incrementally merged from
+      the external tables above. No cleaning, casting, or dedup happens here
+      -- that's Silver's job.
+    database: CT_VAISHNAVI_PRAVIN_DB
+    schema: BRONZE
+
+    config:
+      freshness:
+        warn_after: {count: 1, period: day}
+        error_after: {count: 2, period: day}
+      loaded_at_field: _LOADED_AT
+
+    tables:
+      - name: bronze_campaign
+      - name: bronze_customer
+      - name: bronze_product
+      - name: bronze_orders
+      - name: bronze_employee
+      - name: bronze_store
+      - name: bronze_supplier
