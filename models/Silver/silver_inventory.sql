@@ -1,686 +1,445 @@
-{{ config(materialized='table', schema ='SILVER') }}
+{{ config(
+    materialized='table',
+    schema='SILVER'
+) }}
 
-WITH product_snapshots AS (
-
-    SELECT
-
-        product_id,
-
-        product_name,
-
-        category,
-
-        subcategory,
-
-        product_line,
-
-        stock_quantity,
-
-        reorder_level,
-
-        last_modified_date,
-
-        dbt_valid_from,
-
-        dbt_valid_to,
-
-        loaded_at,
-
-        source_file,
-
-        batch_id,
-
-        -------------------------------------------------
-        -- The actual inventory snapshot date is the
-        -- date on which this version became valid.
-        -------------------------------------------------
-
-        CAST(
-            dbt_valid_from AS DATE
-        ) AS snapshot_date
-
-    FROM {{ ref('snapshot_inventory') }}
-
-),
-
-/* =====================================================
-   STEP 1
-   Get the previous product snapshot
-   ===================================================== */
-
-product_snapshot_history AS (
+WITH products_flattened AS (
 
     SELECT
 
-        *,
-
-        LAG(stock_quantity) OVER (
-
-            PARTITION BY product_id
-
-            ORDER BY snapshot_date
-
-        ) AS previous_stock_quantity,
-
-        LAG(snapshot_date) OVER (
-
-            PARTITION BY product_id
-
-            ORDER BY snapshot_date
-
-        ) AS previous_snapshot_date
-
-    FROM product_snapshots
-
-),
-
-/* =====================================================
-   STEP 2
-   Create a daily date spine
-
-   This allows stock to be carried forward when there
-   is no product snapshot on a particular day.
-   ===================================================== */
-
-date_bounds AS (
-
-    SELECT
-
-        MIN(snapshot_date) AS min_date,
-
-        MAX(snapshot_date) AS max_date
-
-    FROM product_snapshots
-
-),
-
-date_spine AS (
-
-    SELECT
-
-        DATEADD(
-            DAY,
-            SEQ4(),
-            min_date
-        ) AS inventory_date
-
-    FROM date_bounds,
-
-         TABLE(
-             GENERATOR(
-                 ROWCOUNT => 10000
-             )
-         )
-
-    WHERE DATEADD(
-        DAY,
-        SEQ4(),
-        min_date
-    ) <= max_date
-
-),
-
-/* =====================================================
-   STEP 3
-   Get all products
-   ===================================================== */
-
-products AS (
-
-    SELECT DISTINCT
-
-        product_id
-
-    FROM product_snapshots
-
-),
-
-/* =====================================================
-   STEP 4
-   Product × Date spine
-   ===================================================== */
-
-product_dates AS (
-
-    SELECT
-
-        p.product_id,
-
-        d.inventory_date
-
-    FROM products p
-
-    CROSS JOIN date_spine d
-
-),
-
-/* =====================================================
-   STEP 5
-   Match actual product snapshots to dates
-   ===================================================== */
-
-daily_snapshot_matches AS (
-
-    SELECT
-
-        pd.product_id,
-
-        pd.inventory_date,
-
-        ps.product_name,
-
-        ps.category,
-
-        ps.subcategory,
-
-        ps.product_line,
-
-        ps.stock_quantity AS snapshot_stock_quantity,
-
-        ps.reorder_level,
-
-        ps.snapshot_date AS source_snapshot_date,
-
-        ps.dbt_valid_from,
-
-        ps.dbt_valid_to,
-
-        ps.loaded_at,
-
-        ps.source_file,
-
-        ps.batch_id
-
-    FROM product_dates pd
-
-    LEFT JOIN product_snapshots ps
-
-        ON pd.product_id = ps.product_id
-
-       AND pd.inventory_date = ps.snapshot_date
-
-),
-
-/* =====================================================
-   STEP 6
-   Carry forward the latest known stock position.
-
-   If there is no snapshot on a day, use the most
-   recent available snapshot.
-   ===================================================== */
-
-carried_forward AS (
-
-    SELECT
-
-        *,
-
-        LAST_VALUE(
-            snapshot_stock_quantity
-        ) IGNORE NULLS OVER (
-
-            PARTITION BY product_id
-
-            ORDER BY inventory_date
-
-            ROWS BETWEEN UNBOUNDED PRECEDING
-                 AND CURRENT ROW
-
-        ) AS ending_stock,
-
-        LAST_VALUE(
-            reorder_level
-        ) IGNORE NULLS OVER (
-
-            PARTITION BY product_id
-
-            ORDER BY inventory_date
-
-            ROWS BETWEEN UNBOUNDED PRECEDING
-                 AND CURRENT ROW
-
-        ) AS current_reorder_level,
-
-        LAST_VALUE(
-            product_name
-        ) IGNORE NULLS OVER (
-
-            PARTITION BY product_id
-
-            ORDER BY inventory_date
-
-            ROWS BETWEEN UNBOUNDED PRECEDING
-                 AND CURRENT ROW
-
-        ) AS current_product_name,
-
-        LAST_VALUE(
-            category
-        ) IGNORE NULLS OVER (
-
-            PARTITION BY product_id
-
-            ORDER BY inventory_date
-
-            ROWS BETWEEN UNBOUNDED PRECEDING
-                 AND CURRENT ROW
-
-        ) AS current_category,
-
-        LAST_VALUE(
-            subcategory
-        ) IGNORE NULLS OVER (
-
-            PARTITION BY product_id
-
-            ORDER BY inventory_date
-
-            ROWS BETWEEN UNBOUNDED PRECEDING
-                 AND CURRENT ROW
-
-        ) AS current_subcategory,
-
-        LAST_VALUE(
-            product_line
-        ) IGNORE NULLS OVER (
-
-            PARTITION BY product_id
-
-            ORDER BY inventory_date
-
-            ROWS BETWEEN UNBOUNDED PRECEDING
-                 AND CURRENT ROW
-
-        ) AS current_product_line,
-
-        LAST_VALUE(
-            source_snapshot_date
-        ) IGNORE NULLS OVER (
-
-            PARTITION BY product_id
-
-            ORDER BY inventory_date
-
-            ROWS BETWEEN UNBOUNDED PRECEDING
-                 AND CURRENT ROW
-
-        ) AS latest_snapshot_date
-
-    FROM daily_snapshot_matches
-
-),
-
-/* =====================================================
-   STEP 7
-   Flatten completed order items
-
-   Only COMPLETED orders contribute to sold quantity.
-   ===================================================== */
-
-completed_order_items AS (
-
-    SELECT
-
-        TRIM(
-            o.raw_data:order_id::STRING
-        ) AS order_id,
-
-        TRIM(
-            item.value:product_id::STRING
+        /* =================================================
+           Product
+           ================================================= */
+
+        UPPER(
+            TRIM(product.value:product_id::STRING)
         ) AS product_id,
 
         TRY_TO_NUMBER(
-            item.value:quantity::STRING
-        ) AS quantity,
+            product.value:stock_quantity::STRING
+        ) AS stock_quantity,
+
+        TRY_TO_NUMBER(
+            product.value:reorder_level::STRING
+        ) AS reorder_level,
+
+        /* =================================================
+           Inventory Snapshot Date
+
+           Extracted from source file name.
+           Example:
+           inventory_2025-01-15.csv
+           ================================================= */
 
         TRY_TO_DATE(
-            TRIM(
-                o.raw_data:order_date::STRING
+            REGEXP_SUBSTR(
+                SOURCE_FILE,
+                '[0-9]{4}-[0-9]{2}-[0-9]{2}'
             )
-        ) AS order_date
+        ) AS inventory_snapshot_date,
 
-    FROM {{ ref('snapshot_orders') }} o,
+        /* =================================================
+           Metadata
+           ================================================= */
+
+        SOURCE_FILE,
+        ROW_NUMBER,
+        LOADED_AT,
+        BATCH_ID
+
+    FROM {{ ref('bronze_product') }},
 
          LATERAL FLATTEN(
-             INPUT => o.raw_data:order_items
-         ) item
-
-    WHERE o.dbt_valid_to IS NULL
-
-      AND UPPER(
-          TRIM(
-              o.raw_data:order_status::STRING
-          )
-      ) = 'COMPLETED'
-
-      AND item.value:product_id IS NOT NULL
+             INPUT => RAW_DATA:products_data
+         ) product
 
 ),
 
-/* =====================================================
-   STEP 8
-   Aggregate sold quantity by product and day
-   ===================================================== */
 
-daily_sales AS (
+/* =========================================================
+   DEDUPLICATION
+
+   One product per inventory snapshot date.
+   ========================================================= */
+
+deduped AS (
+
+    SELECT *
+
+    FROM products_flattened
+
+    WHERE product_id IS NOT NULL
+
+      AND inventory_snapshot_date IS NOT NULL
+
+    QUALIFY ROW_NUMBER() OVER (
+
+        PARTITION BY
+            product_id,
+            inventory_snapshot_date
+
+        ORDER BY
+            LOADED_AT DESC,
+            SOURCE_FILE DESC,
+            ROW_NUMBER DESC
+
+    ) = 1
+
+),
+
+
+/* =========================================================
+   STOCK HISTORY
+
+   Calculate previous inventory snapshot and beginning
+   inventory using LAG.
+   ========================================================= */
+
+stock_history AS (
 
     SELECT
 
         product_id,
 
-        order_date AS inventory_date,
+        inventory_snapshot_date,
 
-        SUM(
-            quantity
-        ) AS sold_quantity
+        reorder_level,
 
-    FROM completed_order_items
+        stock_quantity AS ending_inventory,
 
-    GROUP BY
+        LAG(
+            inventory_snapshot_date
+        ) OVER (
+            PARTITION BY product_id
+            ORDER BY inventory_snapshot_date
+        ) AS inventory_previous_snapshot_date,
+
+        LAG(
+            stock_quantity
+        ) OVER (
+            PARTITION BY product_id
+            ORDER BY inventory_snapshot_date
+        ) AS beginning_inventory,
+
+        SOURCE_FILE,
+        ROW_NUMBER,
+        LOADED_AT,
+        BATCH_ID
+
+    FROM deduped
+
+),
+
+
+/* =========================================================
+   INVENTORY SNAPSHOT METRICS
+   ========================================================= */
+
+stock_with_lag AS (
+
+    SELECT
 
         product_id,
 
-        order_date
+        inventory_snapshot_date,
 
-),
+        inventory_previous_snapshot_date,
 
-/* =====================================================
-   STEP 9
-   Attach sales to inventory dates
-   ===================================================== */
+        beginning_inventory,
 
-inventory_with_sales AS (
+        ending_inventory,
 
-    SELECT
-
-        cf.product_id,
-
-        cf.inventory_date,
-
-        cf.current_product_name AS product_name,
-
-        cf.current_category AS category,
-
-        cf.current_subcategory AS subcategory,
-
-        cf.current_product_line AS product_line,
-
-        cf.ending_stock,
-
-        cf.current_reorder_level AS reorder_level,
-
-        cf.latest_snapshot_date,
-
-        COALESCE(
-            ds.sold_quantity,
-            0
-        ) AS sold_quantity,
-
-        cf.loaded_at,
-
-        cf.source_file,
-
-        cf.batch_id,
-
-        cf.dbt_valid_from,
-
-        cf.dbt_valid_to
-
-    FROM carried_forward cf
-
-    LEFT JOIN daily_sales ds
-
-        ON cf.product_id = ds.product_id
-
-       AND cf.inventory_date = ds.inventory_date
-
-),
-
-/* =====================================================
-   STEP 10
-   Calculate beginning stock.
-
-   Beginning stock = prior day's ending stock.
-   ===================================================== */
-
-with_beginning_stock AS (
-
-    SELECT
-
-        *,
-
-        LAG(
-            ending_stock
-        ) OVER (
-
-            PARTITION BY product_id
-
-            ORDER BY inventory_date
-
-        ) AS beginning_stock,
-
-        LAG(
-            inventory_date
-        ) OVER (
-
-            PARTITION BY product_id
-
-            ORDER BY inventory_date
-
-        ) AS previous_inventory_date
-
-    FROM inventory_with_sales
-
-),
-
-/* =====================================================
-   STEP 11
-   Calculate inferred purchased quantity.
-
-   Requirement:
-   purchased_quantity =
-       ending_stock
-       - beginning_stock
-       + sold_quantity
-
-   This is inferred because receiving events do not
-   exist in the source.
-   ===================================================== */
-
-with_purchases AS (
-
-    SELECT
-
-        *,
-
-        CASE
-
-            WHEN beginning_stock IS NOT NULL
-             AND ending_stock IS NOT NULL
-
-            THEN
-                ending_stock
-                - beginning_stock
-                + sold_quantity
-
-            ELSE NULL
-
-        END AS purchased_quantity
-
-    FROM with_beginning_stock
-
-),
-
-/* =====================================================
-   STEP 12
-   Detect snapshot gaps.
-
-   > 12 days = stale / explicit carry-forward.
-   ===================================================== */
-
-with_gap_flag AS (
-
-    SELECT
-
-        *,
+        reorder_level,
 
         DATEDIFF(
             DAY,
-            latest_snapshot_date,
-            inventory_date
-        ) AS snapshot_age_days,
+            inventory_previous_snapshot_date,
+            inventory_snapshot_date
+        ) AS inventory_days_since_last_snapshot,
 
-        CASE
+        SOURCE_FILE,
+        ROW_NUMBER,
+        LOADED_AT,
+        BATCH_ID
 
-            WHEN latest_snapshot_date IS NULL
-                THEN 'No Snapshot'
-
-            WHEN DATEDIFF(
-                DAY,
-                latest_snapshot_date,
-                inventory_date
-            ) > 12
-
-                THEN 'Stale - Carry Forward'
-
-            ELSE 'Current'
-
-        END AS snapshot_status
-
-    FROM with_purchases
+    FROM stock_history
 
 ),
 
-/* =====================================================
-   STEP 13
-   Validate numeric balances and stock positions.
-   ===================================================== */
 
-final AS (
+/* =========================================================
+   COMPLETED SALES
+
+   Daily product-level completed sales.
+
+   Orders are used because they contain actual sales
+   quantities and dates.
+   ========================================================= */
+
+sold_quantities AS (
 
     SELECT
 
-        product_id,
+        UPPER(
+            TRIM(
+                item.value:product_id::STRING
+            )
+        ) AS product_id,
 
-        product_name,
+        TRY_TO_TIMESTAMP_NTZ(
+            ord.raw_data:order_date::STRING
+        )::DATE AS sold_date,
 
-        category,
+        SUM(
+            TRY_TO_NUMBER(
+                item.value:quantity::STRING
+            )
+        ) AS sold_quantity
 
-        subcategory,
+    FROM {{ ref('snapshot_orders') }} ord,
 
-        product_line,
+         LATERAL FLATTEN(
+             INPUT => ord.raw_data:order_items
+         ) item
 
-        inventory_date,
+    WHERE ord.dbt_valid_to IS NULL
 
-        CAST(
-            beginning_stock AS NUMBER(18,0)
-        ) AS beginning_stock,
+      AND UPPER(
+            TRIM(
+                COALESCE(
+                    ord.raw_data:status::STRING,
+                    ord.raw_data:order_status::STRING
+                )
+            )
+          ) = 'COMPLETED'
 
-        CAST(
-            ending_stock AS NUMBER(18,0)
-        ) AS ending_stock,
+      AND item.value:product_id IS NOT NULL
 
-        CAST(
-            sold_quantity AS NUMBER(18,0)
-        ) AS sold_quantity,
+      AND TRY_TO_NUMBER(
+            item.value:quantity::STRING
+          ) IS NOT NULL
 
-        CAST(
-            purchased_quantity AS NUMBER(18,0)
-        ) AS purchased_quantity,
+    GROUP BY
+        1,
+        2
 
-        CAST(
-            reorder_level AS NUMBER(18,0)
-        ) AS reorder_level,
+),
 
-        -------------------------------------------------
-        -- Low Stock Flag
-        -------------------------------------------------
 
-        CASE
+/* =========================================================
+   JOIN INVENTORY TO SALES
 
-            WHEN ending_stock IS NOT NULL
-             AND reorder_level IS NOT NULL
-             AND ending_stock < reorder_level
+   Sales are calculated for the complete period:
 
-            THEN TRUE
+       previous snapshot < sale date <= current snapshot
 
-            ELSE FALSE
+   This avoids losing sales that occurred between two
+   inventory snapshots.
+   ========================================================= */
 
-        END AS low_stock_flag,
+joined AS (
 
-        -------------------------------------------------
-        -- Negative Balance Validation
-        -------------------------------------------------
+    SELECT
 
-        CASE
+        s.product_id,
 
-            WHEN beginning_stock < 0
-                THEN TRUE
+        s.inventory_snapshot_date,
 
-            WHEN ending_stock < 0
-                THEN TRUE
+        s.inventory_previous_snapshot_date,
 
-            WHEN sold_quantity < 0
-                THEN TRUE
+        s.beginning_inventory,
 
-            WHEN purchased_quantity < 0
-                THEN TRUE
+        s.ending_inventory,
 
-            ELSE FALSE
+        s.reorder_level,
 
-        END AS has_negative_balance,
+        s.inventory_days_since_last_snapshot,
 
-        -------------------------------------------------
-        -- Numeric Validation
-        -------------------------------------------------
+        s.SOURCE_FILE,
 
-        CASE
+        s.ROW_NUMBER,
 
-            WHEN beginning_stock IS NULL
-             AND inventory_date >
-                 latest_snapshot_date
+        s.LOADED_AT,
 
-                THEN 'CARRY_FORWARD'
+        s.BATCH_ID,
 
-            WHEN beginning_stock IS NOT NULL
-             AND ending_stock IS NOT NULL
-             AND sold_quantity IS NOT NULL
-             AND purchased_quantity IS NOT NULL
+        SUM(
+            COALESCE(
+                sq.sold_quantity,
+                0
+            )
+        ) AS inventory_sold_quantity
 
-                THEN 'VALID'
+    FROM stock_with_lag s
 
-            ELSE 'CHECK'
+    LEFT JOIN sold_quantities sq
 
-        END AS inventory_validation_status,
+        ON s.product_id = sq.product_id
 
-        -------------------------------------------------
-        -- Snapshot Gap
-        -------------------------------------------------
+       AND (
+            s.inventory_previous_snapshot_date IS NULL
+            OR sq.sold_date >
+               s.inventory_previous_snapshot_date
+       )
 
-        snapshot_age_days,
+       AND sq.sold_date <=
+           s.inventory_snapshot_date
 
-        snapshot_status,
+    GROUP BY
 
-        latest_snapshot_date,
+        s.product_id,
 
-        -------------------------------------------------
-        -- Metadata
-        -------------------------------------------------
+        s.inventory_snapshot_date,
 
-        loaded_at,
+        s.inventory_previous_snapshot_date,
 
-        source_file,
+        s.beginning_inventory,
 
-        batch_id,
+        s.ending_inventory,
 
-        dbt_valid_from,
+        s.reorder_level,
 
-        dbt_valid_to
+        s.inventory_days_since_last_snapshot,
 
-    FROM with_gap_flag
+        s.SOURCE_FILE,
+
+        s.ROW_NUMBER,
+
+        s.LOADED_AT,
+
+        s.BATCH_ID
 
 )
 
-SELECT *
 
-FROM final
+/* =========================================================
+   FINAL SILVER INVENTORY
+   ========================================================= */
+
+SELECT
+
+    /* =====================================================
+       Keys / Dates
+       ===================================================== */
+
+    product_id,
+
+    inventory_snapshot_date,
+
+    inventory_previous_snapshot_date,
+
+
+    /* =====================================================
+       Inventory Balances
+       ===================================================== */
+
+    beginning_inventory,
+
+    ending_inventory,
+
+    inventory_sold_quantity,
+
+
+    /* =====================================================
+       Purchased Quantity
+
+       Formula:
+
+       Ending Inventory
+       - Beginning Inventory
+       + Sold Quantity
+
+       This represents inventory purchased during the
+       snapshot interval.
+       ===================================================== */
+
+    (
+        ending_inventory
+        - COALESCE(
+            beginning_inventory,
+            ending_inventory
+          )
+        + inventory_sold_quantity
+    ) AS inventory_purchased_quantity,
+
+
+    /* =====================================================
+       Low Stock
+       ===================================================== */
+
+    CASE
+
+        WHEN ending_inventory IS NOT NULL
+
+         AND reorder_level IS NOT NULL
+
+         AND ending_inventory < reorder_level
+
+        THEN TRUE
+
+        ELSE FALSE
+
+    END AS inventory_low_stock_flag,
+
+
+    /* =====================================================
+       Stale Snapshot
+       ===================================================== */
+
+    CASE
+
+        WHEN inventory_days_since_last_snapshot > 1
+
+        THEN TRUE
+
+        ELSE FALSE
+
+    END AS inventory_stale_snapshot_flag,
+
+
+    /* =====================================================
+       Snapshot Interval
+       ===================================================== */
+
+    inventory_days_since_last_snapshot,
+
+
+    /* =====================================================
+       Negative Inventory Flag
+       ===================================================== */
+
+    CASE
+
+        WHEN ending_inventory < 0
+
+          OR beginning_inventory < 0
+
+        THEN TRUE
+
+        ELSE FALSE
+
+    END AS inventory_negative_balance_flag,
+
+
+    /* =====================================================
+       Reorder Level
+       ===================================================== */
+
+    reorder_level AS inventory_reorder_level,
+
+
+    /* =====================================================
+       Metadata
+       ===================================================== */
+
+    SOURCE_FILE,
+
+    ROW_NUMBER,
+
+    LOADED_AT,
+
+    BATCH_ID
+
+FROM joined
+
+WHERE beginning_inventory IS NOT NULL

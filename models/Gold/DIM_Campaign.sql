@@ -14,19 +14,10 @@ WITH src AS (
 final AS (
 
     SELECT
-
-        -------------------------------------------------
-        -- Surrogate Key
-        -------------------------------------------------
-
-        ROW_NUMBER() OVER (
-            ORDER BY campaign_id
-        ) AS campaign_key,
-
-        -------------------------------------------------
-        -- Natural Key
-        -------------------------------------------------
-
+        /* Surrogate Key */
+       {{ dbt_utils.generate_surrogate_key(['campaign_id']) }} AS campaign_key,
+ 
+        /* Natural Key */
         campaign_id,
 
         -------------------------------------------------
