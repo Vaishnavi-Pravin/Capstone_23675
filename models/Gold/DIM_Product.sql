@@ -15,20 +15,11 @@ final AS (
 
     SELECT
 
-        -------------------------------------------------
-        -- Surrogate Key
-        -------------------------------------------------
-
-        ROW_NUMBER() OVER (
-            ORDER BY product_id
-        ) AS product_key,
-
-        -------------------------------------------------
-        -- Natural Key
-        -------------------------------------------------
-
+        /* Surrogate Key */
+       {{ dbt_utils.generate_surrogate_key(['product_id']) }} AS product_key,
+ 
+        /* Natural Key */
         product_id,
-
         -------------------------------------------------
         -- Product Details
         -------------------------------------------------
