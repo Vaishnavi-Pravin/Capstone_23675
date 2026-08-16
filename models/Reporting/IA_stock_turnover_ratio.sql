@@ -28,12 +28,11 @@ WITH turnover AS (
            STOCK TURNOVER RATIO
            ===================================================== */
 
-        ROUND(
+        
             AVG(
                 fi.stock_turnover_ratio
-            ),
-            2
-        ) AS stock_turnover_ratio,
+            )
+            AS stock_turnover_ratio,
 
 
         /* =====================================================
