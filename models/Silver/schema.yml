@@ -1,0 +1,559 @@
+version: 2
+
+models:
+
+  # =========================================================
+  # 1. SILVER SUPPLIER
+  # =========================================================
+
+  - name: silver_supplier
+
+    description: >
+      Cleaned and standardized supplier information.
+
+    columns:
+
+      - name: supplier_id
+        description: Unique identifier for the supplier.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: supplier_name
+
+      - name: supplier_type
+
+      - name: contact_person
+
+      - name: email
+
+      - name: phone_number
+
+      - name: address
+
+      - name: payment_terms
+
+      - name: tax_id
+
+      - name: website
+
+      - name: is_active
+
+      - name: preferred_carrier
+
+      - name: lead_time_days
+
+      - name: minimum_order_quantity
+
+      - name: credit_rating
+
+      - name: last_modified_date
+
+      - name: last_order_date
+
+      - name: contract_id
+
+      - name: contract_start_date
+
+      - name: contract_end_date
+
+      - name: contract_exclusivity
+
+      - name: contract_renewal_option
+
+      - name: categories_supplied
+
+      - name: average_delay_days
+
+      - name: defect_rate
+
+      - name: on_time_delivery_rate
+
+      - name: quality_rating
+
+      - name: response_time_hours
+
+      - name: returns_percentage
+
+      - name: loaded_at
+
+      - name: source_file
+
+      - name: batch_id
+
+      - name: dbt_valid_from
+
+      - name: dbt_valid_to
+
+
+  # =========================================================
+  # 2. SILVER STORE
+  # =========================================================
+
+  - name: silver_store
+
+    description: >
+      Cleaned and standardized store information.
+
+    columns:
+
+      - name: store_id
+        description: Unique identifier for the store.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: store_name
+
+      - name: store_type
+
+      - name: region
+
+      - name: manager_id
+
+      - name: opening_date
+
+      - name: last_modified_date
+
+      - name: current_sales
+
+      - name: sales_target
+
+      - name: monthly_rent
+
+      - name: size_sq_ft
+
+      - name: employee_count
+
+      - name: is_active
+
+      - name: street
+
+      - name: city
+
+      - name: state
+
+      - name: country
+
+      - name: zip_code
+
+      - name: full_address
+
+      - name: email
+
+      - name: phone_number
+
+      - name: weekdays
+
+      - name: weekends
+
+      - name: holidays
+
+      - name: services
+
+      - name: store_size_category
+        description: >
+          Store size classification.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - Small
+                  - Medium
+                  - Large
+
+      - name: store_age_years
+
+      - name: sales_target_achievement_percentage
+
+      - name: revenue_per_sq_ft
+
+      - name: employee_efficiency
+
+      - name: performance_issue_flag
+
+      - name: loaded_at
+
+      - name: source_file
+
+      - name: batch_id
+
+      - name: dbt_valid_from
+
+      - name: dbt_valid_to
+
+
+  # =========================================================
+  # 3. SILVER PRODUCT
+  # =========================================================
+
+  - name: silver_product
+
+    description: >
+      Cleaned and standardized product information.
+
+    columns:
+
+      - name: product_id
+        description: Unique identifier for the product.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: product_name
+
+      - name: brand
+
+      - name: category
+
+      - name: subcategory
+
+      - name: product_line
+
+      - name: color
+
+      - name: size
+
+      - name: dimensions
+
+      - name: weight
+
+      - name: warranty_period
+
+      - name: supplier_id
+
+      - name: short_description
+
+      - name: technical_specs
+
+      - name: full_description
+
+      - name: unit_price
+
+      - name: cost_price
+
+      - name: stock_quantity
+
+      - name: reorder_level
+
+      - name: launch_date
+
+      - name: last_modified_date
+
+      - name: is_featured
+
+      - name: loaded_at
+
+      - name: source_file
+
+      - name: batch_id
+
+      - name: dbt_valid_from
+
+      - name: dbt_valid_to
+
+      - name: category_hierarchy
+
+      - name: profit_margin_percentage
+
+      - name: low_stock_flag
+
+
+  # =========================================================
+  # 4. SILVER ORDERS
+  # =========================================================
+
+  - name: silver_orders
+
+    description: >
+      Cleaned order-level data with sales, profitability
+      and delivery-performance metrics.
+
+    columns:
+
+      - name: order_id
+        description: Unique identifier for the order.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: customer_id
+
+      - name: employee_id
+
+      - name: store_id
+
+      - name: campaign_id
+
+      - name: order_source
+
+      - name: order_status
+
+      - name: payment_method
+
+      - name: shipping_method
+
+      - name: order_date
+
+      - name: order_time_of_day
+
+      - name: order_week
+
+      - name: order_month
+
+      - name: order_quarter
+
+      - name: order_year
+
+      - name: total_items
+
+      - name: total_quantity
+
+      - name: line_revenue
+
+      - name: line_cost
+
+      - name: total_discount
+
+      - name: order_discount_amount
+
+      - name: profit_amount
+
+      - name: profit_margin_percentage
+
+      - name: processing_days
+
+      - name: shipping_days
+
+      - name: delivery_status
+        description: >
+          Delivery performance classification.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - On Time
+                  - Delayed
+                  - Potentially Delayed
+                  - In Transit
+
+      - name: loaded_at
+
+      - name: source_file
+
+      - name: batch_id
+
+
+  # =========================================================
+  # 5. SILVER CUSTOMER
+  # =========================================================
+
+  - name: silver_customer
+
+    description: >
+      Cleaned and standardized customer information.
+
+    columns:
+
+      - name: customer_id
+        description: Unique identifier for the customer.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: first_name
+
+      - name: last_name
+
+      - name: full_name
+
+      - name: email
+
+      - name: is_valid_email
+
+      - name: phone_number
+
+      - name: is_valid_phone
+
+      - name: birth_date
+
+      - name: registration_date
+
+      - name: last_purchase_date
+
+      - name: last_modified_date
+
+      - name: street
+
+      - name: city
+
+      - name: state
+
+      - name: country
+
+      - name: zip_code
+
+      - name: full_address
+
+      - name: occupation
+
+      - name: income_bracket
+
+      - name: loyalty_tier
+
+      - name: preferred_communication
+
+      - name: preferred_payment_method
+
+      - name: marketing_opt_in
+
+      - name: total_purchases
+
+      - name: total_spend
+
+      - name: loaded_at
+
+      - name: source_file
+
+      - name: batch_id
+
+      - name: dbt_valid_from
+
+      - name: dbt_valid_to
+
+      - name: age
+
+      - name: customer_segment
+        description: >
+          Customer age-based segment.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - Young
+                  - Middle-aged
+                  - Senior
+
+
+  # =========================================================
+  # 6. SILVER CAMPAIGN
+  # =========================================================
+
+  - name: silver_campaign
+
+    description: >
+      Cleaned and standardized marketing campaign information.
+
+    columns:
+
+      - name: campaign_id
+        description: Unique identifier for the campaign.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: campaign_name
+
+      - name: campaign_type
+
+      - name: channel
+
+      - name: description
+
+      - name: start_date
+
+      - name: end_date
+
+      - name: last_modified_date
+
+      - name: campaign_duration_days
+
+      - name: budget
+
+      - name: total_cost
+
+      - name: total_revenue
+
+      - name: target_audience
+
+      - name: audience_group
+
+      - name: audience_age_band
+
+      - name: audience_location
+
+      - name: demographic_segment
+
+      - name: loaded_at
+
+      - name: source_file
+
+      - name: batch_id
+
+      - name: dbt_valid_from
+
+      - name: dbt_valid_to
+
+
+  # =========================================================
+  # 7. SILVER INVENTORY
+  # =========================================================
+
+  - name: silver_inventory
+
+    description: >
+      Product-level inventory snapshots containing beginning,
+      ending, sold and purchased inventory quantities.
+
+    # -------------------------------------------------------
+    # Composite grain:
+    # PRODUCT_ID + INVENTORY_SNAPSHOT_DATE
+    # -------------------------------------------------------
+
+    data_tests:
+
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - product_id
+              - inventory_snapshot_date
+
+    columns:
+
+      - name: product_id
+        description: Product associated with the inventory snapshot.
+        data_tests:
+          - not_null
+
+      - name: inventory_snapshot_date
+        description: Date of the inventory snapshot.
+        data_tests:
+          - not_null
+
+      - name: inventory_previous_snapshot_date
+
+      - name: beginning_inventory
+
+      - name: ending_inventory
+
+      - name: inventory_sold_quantity
+
+      - name: inventory_purchased_quantity
+
+      - name: inventory_low_stock_flag
+
+      - name: inventory_stale_snapshot_flag
+
+      - name: inventory_days_since_last_snapshot
+
+      - name: inventory_negative_balance_flag
+
+      - name: inventory_reorder_level
+
+      - name: source_file
+
+      - name: row_number
+
+      - name: loaded_at
+
+      - name: batch_id
