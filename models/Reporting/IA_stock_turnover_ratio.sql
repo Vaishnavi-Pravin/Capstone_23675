@@ -1,0 +1,113 @@
+{{ config(
+    materialized='view',
+    schema='REPORTING'
+) }}
+
+WITH turnover AS (
+
+    SELECT
+
+        /* =====================================================
+           PRODUCT DIMENSION
+           ===================================================== */
+
+        fi.product_key,
+
+        dp.product_id,
+
+        dp.product_name,
+
+        dp.category,
+
+        dp.subcategory,
+
+        dp.product_line,
+
+
+        /* =====================================================
+           STOCK TURNOVER RATIO
+           ===================================================== */
+
+        ROUND(
+            AVG(
+                fi.stock_turnover_ratio
+            ),
+            2
+        ) AS stock_turnover_ratio,
+
+
+        /* =====================================================
+           TOTAL SOLD QUANTITY
+
+           FACT_INVENTORY uses:
+           inventory_sold_quantity
+           ===================================================== */
+
+        SUM(
+            COALESCE(
+                fi.inventory_sold_quantity,
+                0
+            )
+        ) AS total_sold_quantity,
+
+
+        /* =====================================================
+           AVERAGE INVENTORY
+           ===================================================== */
+
+        AVG(
+            (
+                COALESCE(
+                    fi.beginning_inventory,
+                    0
+                )
+                +
+                COALESCE(
+                    fi.ending_inventory,
+                    0
+                )
+            ) / 2.0
+        ) AS average_inventory
+
+
+    FROM {{ ref('FACT_Inventory') }} fi
+
+
+    /* =====================================================
+       PRODUCT DIMENSION JOIN
+
+       Both FACT_Inventory and DIM_Product use:
+
+       dbt_utils.generate_surrogate_key(['product_id'])
+
+       Therefore product_key can be joined directly.
+       ===================================================== */
+
+    LEFT JOIN {{ ref('DIM_Product') }} dp
+
+        ON fi.product_key = dp.product_key
+
+
+    /* =====================================================
+       GROUP BY PRODUCT
+       ===================================================== */
+
+    GROUP BY
+
+        fi.product_key,
+
+        dp.product_id,
+
+        dp.product_name,
+
+        dp.category,
+
+        dp.subcategory,
+
+        dp.product_line
+
+)
+
+SELECT *
+
+FROM turnover

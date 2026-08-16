@@ -1,568 +1,171 @@
-{{ config(
-    materialized='table',
-    schema='SILVER'
-) }}
-
-WITH products_flattened AS (
-
+WITH all_completed_orders AS (
+ 
     SELECT
-
-        -------------------------------------------------
-        -- Product Key
-        -------------------------------------------------
-
-        UPPER(
-            TRIM(product.value:product_id::STRING)
-        ) AS product_id,
-
-
-        -------------------------------------------------
-        -- Product Details
-        -------------------------------------------------
-
-        INITCAP(
-            TRIM(product.value:name::STRING)
-        ) AS product_name,
-
-        INITCAP(
-            TRIM(product.value:brand::STRING)
-        ) AS brand,
-
-        INITCAP(
-            TRIM(product.value:category::STRING)
-        ) AS category,
-
-        INITCAP(
-            TRIM(product.value:subcategory::STRING)
-        ) AS subcategory,
-
-        INITCAP(
-            TRIM(product.value:product_line::STRING)
-        ) AS product_line,
-
-
-        -------------------------------------------------
-        -- Inventory Fields
-        -------------------------------------------------
-
-        TRY_TO_NUMBER(
-            product.value:stock_quantity::STRING
-        ) AS stock_quantity,
-
-        TRY_TO_NUMBER(
-            product.value:reorder_level::STRING
-        ) AS reorder_level,
-
-
-        -------------------------------------------------
-        -- Product Last Modified Date
-        -------------------------------------------------
-
-        COALESCE(
-
-            TRY_TO_DATE(
-                TRIM(
-                    product.value:last_modified_date::STRING
-                ),
-                'YYYY-MM-DD'
-            ),
-
-            TRY_TO_DATE(
-                TRIM(
-                    product.value:last_modified_date::STRING
-                ),
-                'DD-MM-YYYY'
-            ),
-
-            TRY_TO_DATE(
-                TRIM(
-                    product.value:last_modified_date::STRING
-                ),
-                'MM/DD/YYYY'
-            )
-
-        ) AS last_modified_date,
-
-
-        -------------------------------------------------
-        -- Inventory Snapshot Date
-        --
-        -- Extracted from source file name
-        -------------------------------------------------
-
-        TRY_TO_DATE(
-            REGEXP_SUBSTR(
-                SOURCE_FILE,
-                '[0-9]{4}-[0-9]{2}-[0-9]{2}'
-            )
-        ) AS inventory_snapshot_date,
-
-
-        -------------------------------------------------
-        -- Metadata
-        -------------------------------------------------
-
-        SOURCE_FILE AS source_file,
-
-        ROW_NUMBER AS row_number,
-
-        LOADED_AT AS loaded_at,
-
-        BATCH_ID AS batch_id
-
-
-    FROM {{ ref('bronze_product') }},
-
-         LATERAL FLATTEN(
-             INPUT => RAW_DATA:products_data
-         ) product
-
+        order_id,
+        customer_id,
+        campaign_id,
+        order_date,
+        line_revenue * (1 - (order_discount_amount / 100.0)) AS net_sales_amount
+ 
+    FROM {{ ref('silver_orders') }}
+ 
+    WHERE order_status = 'completed'
+ 
 ),
-
-
-/* =========================================================
-   DEDUPLICATE PRODUCT SNAPSHOTS
-   ========================================================= */
-
-deduped AS (
-
-    SELECT *
-
-    FROM products_flattened
-
-    WHERE product_id IS NOT NULL
-
-      AND inventory_snapshot_date IS NOT NULL
-
-    QUALIFY ROW_NUMBER() OVER (
-
-        PARTITION BY
-            product_id,
-            inventory_snapshot_date
-
-        ORDER BY
-            loaded_at DESC,
-            source_file DESC,
-            row_number DESC
-
-    ) = 1
-
-),
-
-
-/* =========================================================
-   STOCK HISTORY
-   ========================================================= */
-
-stock_history AS (
-
+ 
+customer_first_purchase AS (
+ 
     SELECT
-
-        product_id,
-
-        product_name,
-
-        brand,
-
-        category,
-
-        subcategory,
-
-        product_line,
-
-        inventory_snapshot_date,
-
-        reorder_level,
-
-        stock_quantity AS ending_stock,
-
-
-        -------------------------------------------------
-        -- Previous Snapshot
-        -------------------------------------------------
-
-        LAG(
-            inventory_snapshot_date
-        ) OVER (
-
-            PARTITION BY product_id
-
-            ORDER BY inventory_snapshot_date
-
-        ) AS previous_inventory_snapshot_date,
-
-
-        -------------------------------------------------
-        -- Beginning Stock
-        -------------------------------------------------
-
-        LAG(
-            stock_quantity
-        ) OVER (
-
-            PARTITION BY product_id
-
-            ORDER BY inventory_snapshot_date
-
-        ) AS beginning_stock,
-
-
-        last_modified_date,
-
-        source_file,
-
-        row_number,
-
-        loaded_at,
-
-        batch_id
-
-
-    FROM deduped
-
+        customer_id,
+        MIN(order_date) AS first_purchase_date
+ 
+    FROM all_completed_orders
+ 
+    GROUP BY customer_id
+ 
 ),
-
-
-/* =========================================================
-   SNAPSHOT CALCULATIONS
-   ========================================================= */
-
-stock_with_lag AS (
-
+ 
+campaign_orders AS (
+ 
     SELECT
-
-        product_id,
-
-        product_name,
-
-        brand,
-
-        category,
-
-        subcategory,
-
-        product_line,
-
-        inventory_snapshot_date,
-
-        previous_inventory_snapshot_date,
-
-        beginning_stock,
-
-        ending_stock,
-
-        reorder_level,
-
-        last_modified_date,
-
-
-        -------------------------------------------------
-        -- Days Between Snapshots
-        -------------------------------------------------
-
-        DATEDIFF(
-            DAY,
-            previous_inventory_snapshot_date,
-            inventory_snapshot_date
-        ) AS days_since_last_snapshot,
-
-
-        source_file,
-
-        row_number,
-
-        loaded_at,
-
-        batch_id
-
-
-    FROM stock_history
-
+ 
+        o.order_id,
+        o.customer_id,
+        o.campaign_id,
+        o.order_date,
+        o.net_sales_amount,
+ 
+        CASE
+            WHEN o.order_date = fp.first_purchase_date THEN TRUE
+            ELSE FALSE
+        END AS is_first_purchase,
+ 
+        CASE
+            WHEN o.order_date != fp.first_purchase_date THEN TRUE
+            ELSE FALSE
+        END AS is_repeat_purchase
+ 
+    FROM all_completed_orders o
+ 
+    INNER JOIN customer_first_purchase fp
+        ON o.customer_id = fp.customer_id
+ 
+    WHERE o.campaign_id IS NOT NULL
+ 
 ),
-
-
-/* =========================================================
-   COMPLETED ORDER QUANTITIES
-   ========================================================= */
-
-sold_quantities AS (
-
+ 
+/* Bring in campaign window bounds to guard against any order
+   whose campaign_id is set but whose order_date falls outside
+   that campaign's declared active window (data quality check,
+   mirrors the doc's BETWEEN StartDate AND EndDate condition). */
+ 
+campaign_orders_bounded AS (
+ 
     SELECT
-
-        UPPER(
-            TRIM(
-                item.value:product_id::STRING
-            )
-        ) AS product_id,
-
-        TRY_TO_TIMESTAMP_NTZ(
-            ord.raw_data:order_date::STRING
-        )::DATE AS sold_date,
-
-
-        SUM(
-            TRY_TO_NUMBER(
-                item.value:quantity::STRING
-            )
-        ) AS sold_quantity
-
-
-    FROM {{ ref('snapshot_orders') }} ord,
-
-         LATERAL FLATTEN(
-             INPUT => ord.raw_data:order_items
-         ) item
-
-
-    WHERE ord.dbt_valid_to IS NULL
-
-      AND UPPER(
-            TRIM(
-                COALESCE(
-                    ord.raw_data:status::STRING,
-                    ord.raw_data:order_status::STRING
-                )
-            )
-          ) = 'COMPLETED'
-
-      AND item.value:product_id IS NOT NULL
-
-      AND TRY_TO_NUMBER(
-            item.value:quantity::STRING
-          ) IS NOT NULL
-
-
-    GROUP BY
-        1,
-        2
-
+ 
+        co.*,
+        dc.campaign_key,
+        dc.total_cost
+ 
+    FROM campaign_orders co
+ 
+    INNER JOIN {{ ref('DIM_Campaign') }} dc
+        ON co.campaign_id = dc.campaign_id
+       AND dc.dbt_valid_to IS NULL
+       AND co.order_date BETWEEN dc.start_date AND dc.end_date
+ 
 ),
-
-
-/* =========================================================
-   JOIN INVENTORY WITH SALES
-   ========================================================= */
-
-joined AS (
-
+ 
+daily_agg AS (
+ 
     SELECT
-
-        s.product_id,
-
-        s.product_name,
-
-        s.brand,
-
-        s.category,
-
-        s.subcategory,
-
-        s.product_line,
-
-        s.inventory_snapshot_date,
-
-        s.previous_inventory_snapshot_date,
-
-        s.beginning_stock,
-
-        s.ending_stock,
-
-        s.reorder_level,
-
-        s.days_since_last_snapshot,
-
-        s.last_modified_date,
-
-        s.source_file,
-
-        s.row_number,
-
-        s.loaded_at,
-
-        s.batch_id,
-
-
-        -------------------------------------------------
-        -- Sales During Snapshot Interval
-        -------------------------------------------------
-
-        SUM(
-            COALESCE(
-                sq.sold_quantity,
-                0
-            )
-        ) AS sold_quantity
-
-
-    FROM stock_with_lag s
-
-
-    LEFT JOIN sold_quantities sq
-
-        ON s.product_id = sq.product_id
-
-       AND sq.sold_date >
-           s.previous_inventory_snapshot_date
-
-       AND sq.sold_date <=
-           s.inventory_snapshot_date
-
-
-    GROUP BY
-
-        s.product_id,
-
-        s.product_name,
-
-        s.brand,
-
-        s.category,
-
-        s.subcategory,
-
-        s.product_line,
-
-        s.inventory_snapshot_date,
-
-        s.previous_inventory_snapshot_date,
-
-        s.beginning_stock,
-
-        s.ending_stock,
-
-        s.reorder_level,
-
-        s.days_since_last_snapshot,
-
-        s.last_modified_date,
-
-        s.source_file,
-
-        s.row_number,
-
-        s.loaded_at,
-
-        s.batch_id
-
+ 
+        campaign_key,
+        total_cost,
+        CAST(order_date AS DATE) AS activity_date,
+ 
+        SUM(net_sales_amount) AS daily_sales_influenced,
+ 
+        COUNT(DISTINCT
+            CASE WHEN is_first_purchase THEN customer_id END
+        ) AS daily_new_customers,
+ 
+        COUNT(DISTINCT
+            CASE WHEN is_repeat_purchase THEN customer_id END
+        ) AS daily_repeat_customers,
+ 
+        COUNT(DISTINCT
+            CASE WHEN is_first_purchase THEN customer_id END
+        ) AS daily_first_purchase_customers
+ 
+    FROM campaign_orders_bounded
+ 
+    GROUP BY campaign_key, total_cost, CAST(order_date AS DATE)
+ 
+),
+ 
+with_cumulative AS (
+ 
+    SELECT
+ 
+        *,
+ 
+        SUM(daily_sales_influenced) OVER (
+            PARTITION BY campaign_key
+            ORDER BY activity_date
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS cumulative_sales_influenced,
+ 
+        SUM(daily_repeat_customers) OVER (
+            PARTITION BY campaign_key
+            ORDER BY activity_date
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS cumulative_repeat_customers,
+ 
+        SUM(daily_first_purchase_customers) OVER (
+            PARTITION BY campaign_key
+            ORDER BY activity_date
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS cumulative_first_purchase_customers
+ 
+    FROM daily_agg
+ 
 )
-
-
-/* =========================================================
-   FINAL SILVER INVENTORY
-   ========================================================= */
-
+ 
 SELECT
-
-    -------------------------------------------------
-    -- Product
-    -------------------------------------------------
-
-    product_id,
-
-    product_name,
-
-    brand,
-
-    category,
-
-    subcategory,
-
-    product_line,
-
-
-    -------------------------------------------------
-    -- Inventory Snapshot
-    -------------------------------------------------
-
-    inventory_snapshot_date,
-
-    previous_inventory_snapshot_date,
-
-    beginning_stock,
-
-    ending_stock,
-
-    sold_quantity,
-
-
-    -------------------------------------------------
-    -- Purchased Quantity
-    -------------------------------------------------
-
-    (
-        ending_stock
-        - COALESCE(
-            beginning_stock,
-            ending_stock
-          )
-        + sold_quantity
-    ) AS purchased_quantity,
-
-
-    -------------------------------------------------
-    -- Inventory Flags
-    -------------------------------------------------
-
+ 
+    {{ dbt_utils.generate_surrogate_key(['campaign_key', 'activity_date']) }}
+        AS marketing_performance_key,
+ 
+    campaign_key,
+    dd.date_key,
+ 
+    daily_sales_influenced AS total_sales_influenced,
+    daily_new_customers AS new_customers_acquired,
+ 
+    /* Repeat Purchase Rate: cumulative repeat / cumulative first-purchase,
+       trending as the campaign progresses. Guarded against divide-by-zero. */
     CASE
-
-        WHEN ending_stock IS NOT NULL
-
-         AND reorder_level IS NOT NULL
-
-         AND ending_stock < reorder_level
-
-        THEN TRUE
-
-        ELSE FALSE
-
-    END AS low_stock_flag,
-
-
+        WHEN cumulative_first_purchase_customers > 0
+        THEN ROUND(
+            100.0 * cumulative_repeat_customers / cumulative_first_purchase_customers,
+            2
+        )
+        ELSE NULL
+    END AS repeat_purchase_rate,
+ 
+    /* ROI: cumulative sales influenced to date vs. fixed total campaign
+       cost, guarded against divide-by-zero. */
     CASE
-
-        WHEN days_since_last_snapshot > 1
-
-        THEN TRUE
-
-        ELSE FALSE
-
-    END AS stale_snapshot_flag,
-
-
-    days_since_last_snapshot,
-
-
-    CASE
-
-        WHEN ending_stock < 0
-
-          OR beginning_stock < 0
-
-        THEN TRUE
-
-        ELSE FALSE
-
-    END AS negative_balance_flag,
-
-
-    reorder_level,
-
-
-    -------------------------------------------------
-    -- Product Metadata
-    -------------------------------------------------
-
-    last_modified_date,
-
-    loaded_at,
-
-    source_file,
-
-    row_number,
-
-    batch_id
-
-
-FROM joined
-
-WHERE beginning_stock IS NOT NULL
+        WHEN total_cost > 0
+        THEN ROUND(
+            (cumulative_sales_influenced - total_cost) / total_cost * 100,
+            2
+        )
+        ELSE NULL
+    END AS roi
+ 
+FROM with_cumulative wc
+ 
+LEFT JOIN {{ ref('DIM_Date') }} dd
+    ON wc.activity_date = dd.full_date
