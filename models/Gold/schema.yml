@@ -1,0 +1,471 @@
+version: 2
+
+models:
+
+  # =========================================================
+  # 1. DIM DATE
+  # =========================================================
+
+  - name: dim_date
+
+    description: >
+      Date dimension generated from a dbt date spine, complete
+      and gap-free by construction.
+
+    columns:
+
+      - name: date_key
+        description: Surrogate key for the date dimension.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: full_date
+
+      - name: year
+
+      - name: quarter
+
+      - name: month
+
+      - name: week
+
+      - name: day_of_week
+
+      - name: holiday_flag
+
+      - name: season
+
+
+  # =========================================================
+  # 2. DIM PRODUCT
+  # =========================================================
+
+  - name: dim_product
+
+    description: >
+      Product dimension tracked with SCD Type 2 history.
+
+    columns:
+
+      - name: product_key
+        description: Surrogate key for the product dimension.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: product_id
+
+      - name: product_name
+
+      - name: brand
+
+      - name: category
+
+      - name: subcategory
+
+      - name: product_line
+
+      - name: color
+
+      - name: size
+
+      - name: dimensions
+
+      - name: weight
+
+      - name: warranty_period
+
+      - name: supplier_id
+
+      - name: short_description
+
+      - name: technical_specs
+
+      - name: full_description
+
+      - name: unit_price
+
+      - name: cost_price
+
+      - name: profit_margin_percentage
+
+      - name: stock_quantity
+
+      - name: reorder_level
+
+      - name: low_stock_flag
+
+      - name: launch_date
+
+      - name: last_modified_date
+
+      - name: is_featured
+
+      - name: loaded_at
+
+      - name: source_file
+
+      - name: batch_id
+
+      - name: dbt_valid_from
+
+      - name: dbt_valid_to
+
+
+  # =========================================================
+  # 3. DIM STORE
+  # =========================================================
+
+  - name: dim_store
+
+    description: >
+      Store dimension.
+
+    columns:
+
+      - name: store_key
+        description: Surrogate key for the store dimension.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: store_id
+
+      - name: store_name
+
+      - name: store_type
+
+      - name: region
+
+      - name: full_address
+
+      - name: opening_date
+
+      - name: store_size_category
+        description: >
+          Store size classification.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - Small
+                  - Medium
+                  - Large
+
+
+  # =========================================================
+  # 4. DIM SUPPLIER
+  # =========================================================
+
+  - name: dim_supplier
+
+    description: >
+      Supplier dimension.
+
+    columns:
+
+      - name: supplier_key
+        description: Surrogate key for the supplier dimension.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: supplier_id
+
+      - name: supplier_name
+
+      - name: supplier_type
+
+      - name: contact_person
+
+      - name: email
+
+      - name: phone_number
+
+      - name: address
+
+      - name: payment_terms
+
+
+  # =========================================================
+  # 5. DIM MARKETING CAMPAIGN
+  # =========================================================
+
+  - name: dim_marketing_campaign
+
+    description: >
+      Marketing campaign dimension.
+
+    columns:
+
+      - name: campaign_key
+        description: Surrogate key for the campaign dimension.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: campaign_id
+
+      - name: campaign_name
+
+      - name: campaign_type
+
+      - name: channel
+
+      - name: description
+
+      - name: start_date
+
+      - name: end_date
+
+      - name: last_modified_date
+
+      - name: target_audience
+
+      - name: audience_group
+
+      - name: audience_age_band
+
+      - name: audience_location
+
+      - name: demographic_segment
+
+      - name: campaign_duration_days
+
+      - name: budget
+
+      - name: total_cost
+
+      - name: total_revenue
+
+      - name: loaded_at
+
+      - name: source_file
+
+      - name: batch_id
+
+      - name: dbt_valid_from
+
+      - name: dbt_valid_to
+
+
+  # =========================================================
+  # 6. DIM CUSTOMER
+  # =========================================================
+
+  - name: dim_customer
+
+    description: >
+      Customer dimension.
+
+    columns:
+
+      - name: customer_key
+        description: Surrogate key for the customer dimension.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: customer_id
+
+      - name: first_name
+
+      - name: last_name
+
+      - name: full_name
+
+      - name: email
+
+      - name: is_valid_email
+
+      - name: phone_number
+
+      - name: is_valid_phone
+
+      - name: birth_date
+
+      - name: registration_date
+
+      - name: last_purchase_date
+
+      - name: age
+
+      - name: customer_segment
+        description: >
+          Customer age-based segment.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - Young
+                  - Middle-aged
+                  - Senior
+
+      - name: street
+
+      - name: city
+
+      - name: state
+
+      - name: country
+
+      - name: zip_code
+
+      - name: full_address
+
+      - name: occupation
+
+      - name: income_bracket
+
+      - name: loyalty_tier
+
+      - name: preferred_communication
+
+      - name: preferred_payment_method
+
+      - name: marketing_opt_in
+
+      - name: total_purchases
+
+      - name: total_spend
+
+
+  # =========================================================
+  # 7. FACT INVENTORY
+  # =========================================================
+
+  - name: fact_inventory
+
+    description: >
+      Grain: one row per product per store per date
+      (periodic snapshot of inventory position).
+
+    # -------------------------------------------------------
+    # Composite grain:
+    # PRODUCT_KEY + STORE_KEY + DATE_KEY
+    # -------------------------------------------------------
+
+    data_tests:
+
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - product_key
+              - store_key
+              - date_key
+
+    columns:
+
+      - name: inventory_key
+        description: Surrogate key for the inventory fact.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: product_key
+        description: Foreign key to dim_product.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_product')
+                field: product_key
+
+      - name: date_key
+        description: Foreign key to dim_date.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+
+      - name: store_key
+        description: Foreign key to dim_store.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_store')
+                field: store_key
+
+      - name: supplier_key
+        description: Foreign key to dim_supplier.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_supplier')
+                field: supplier_key
+
+      - name: beginning_inventory
+
+      - name: inventory_purchased_quantity
+
+      - name: inventory_sold_quantity
+
+      - name: ending_inventory
+
+      - name: inventory_value
+
+      - name: stock_turnover_ratio
+
+      - name: supplier_contribution_percentage
+
+
+  # =========================================================
+  # 8. FACT MARKETING PERFORMANCE
+  # =========================================================
+
+  - name: fact_marketing_performance
+
+    description: >
+      Grain: one row per campaign per date.
+
+    # -------------------------------------------------------
+    # Composite grain:
+    # CAMPAIGN_KEY + DATE_KEY
+    # -------------------------------------------------------
+
+    data_tests:
+
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - campaign_key
+              - date_key
+
+    columns:
+
+      - name: marketing_performance_key
+        description: Surrogate key for the marketing performance fact.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: campaign_key
+        description: Foreign key to dim_marketing_campaign.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_marketing_campaign')
+                field: campaign_key
+
+      - name: date_key
+        description: Foreign key to dim_date.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+
+      - name: total_sales_influenced
+
+      - name: new_customers_acquired
+
+      - name: repeat_purchase_rate
+
+      - name: roi
