@@ -3,65 +3,49 @@
     schema='REPORTING'
 ) }}
 
-WITH supply_analysis AS (
+/* =========================================================
+   SUPPLIER PERFORMANCE ANALYSIS
 
-    SELECT
+   SOURCE:
+   dim_supplier
 
-        order_id,
-
-        order_date,
-
-        processing_days,
-
-        shipping_days,
-
-        delivery_status
-
-    FROM {{ ref('silver_orders') }}
-
-    WHERE order_id IS NOT NULL
-
-)
+   LOGIC:
+   - Calculate delayed rate from on-time delivery rate
+   - Classify suppliers into performance tiers
+   - Order suppliers by on-time delivery performance
+   ========================================================= */
 
 SELECT
 
-    delivery_status,
+    ds.supplier_key,
 
-    COUNT(DISTINCT order_id) AS total_orders,
+    ds.supplier_id,
 
-    ROUND(
-        AVG(processing_days),
-        2
-    ) AS average_processing_days,
+    ds.supplier_name,
 
-    ROUND(
-        AVG(shipping_days),
-        2
-    ) AS average_shipping_days,
+    ds.supplier_type,
+
+    ds.on_time_delivery_rate,
 
     ROUND(
-        100.0
-        * COUNT(DISTINCT order_id)
-        / NULLIF(
-            SUM(COUNT(DISTINCT order_id))
-                OVER (),
-            0
-        ),
+        100 - ds.on_time_delivery_rate,
         2
-    ) AS percentage_of_orders
+    ) AS delayed_rate,
 
-FROM supply_analysis
+    CASE
 
-GROUP BY
+        WHEN ds.on_time_delivery_rate >= 95
+            THEN 'On Time'
 
-    delivery_status
+        WHEN ds.on_time_delivery_rate >= 85
+            THEN 'Acceptable'
+
+        ELSE 'Needs Improvement'
+
+    END AS performance_tier
+
+FROM {{ ref('DIM_Supplier') }} ds
 
 ORDER BY
 
-    CASE delivery_status
-        WHEN 'On Time' THEN 1
-        WHEN 'Delayed' THEN 2
-        WHEN 'Potentially Delayed' THEN 3
-        WHEN 'In Transit' THEN 4
-        ELSE 5
-    END
+    ds.on_time_delivery_rate DESC

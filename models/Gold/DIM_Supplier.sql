@@ -46,8 +46,9 @@ final AS (
         -- Payment Terms
         -------------------------------------------------
 
-        payment_terms
+        payment_terms,
 
+        on_time_delivery_rate
     FROM src
 
     WHERE supplier_id IS NOT NULL
