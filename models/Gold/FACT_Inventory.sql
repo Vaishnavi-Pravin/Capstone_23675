@@ -7,16 +7,34 @@
    FACT_INVENTORY
 
    GRAIN:
-   One row per PRODUCT + STORE + INVENTORY SNAPSHOT DATE.
+   One row per PRODUCT + STORE + INVENTORY SNAPSHOT DATE
+   ONLY when a real completed sale occurred for that
+   product/store during the inventory snapshot interval.
 
    SOURCE:
    silver_inventory
 
    DIMENSIONS:
-   - dim_product
-   - dim_store
-   - dim_supplier
-   - dim_date
+   - DIM_Product
+   - DIM_Store
+   - DIM_Supplier
+   - DIM_Date
+
+   IMPORTANT:
+   No CROSS JOIN is used.
+
+   Store rows are created only when a real completed sale
+   occurred for the product during:
+
+       inventory_previous_snapshot_date
+       <
+       sold_date
+       <=
+       inventory_snapshot_date
+
+   Inventory quantities remain product/company-level because
+   the source does not contain actual store-level inventory
+   quantities.
    ========================================================= */
 
 
@@ -25,52 +43,6 @@ WITH inventory AS (
     SELECT *
 
     FROM {{ ref('silver_inventory') }}
-
-),
-
-
-/* =========================================================
-   ACTIVE STORES
-   ========================================================= */
-
-active_stores AS (
-
-    SELECT
-
-        CAST(
-            store_key AS VARCHAR
-        ) AS store_key,
-
-        TRIM(
-            store_id
-        ) AS store_id
-
-    FROM {{ ref('DIM_Store') }}
-
-    WHERE store_id IS NOT NULL
-
-      AND TRIM(store_id) <> ''
-
-),
-
-
-/* =========================================================
-   PRODUCT × STORE INVENTORY GRAIN
-   ========================================================= */
-
-inventory_by_store AS (
-
-    SELECT
-
-        i.*,
-
-        s.store_id,
-
-        s.store_key
-
-    FROM inventory i
-
-    CROSS JOIN active_stores s
 
 ),
 
@@ -140,63 +112,123 @@ sold_by_store_daily AS (
 
 /* =========================================================
    SALES BETWEEN INVENTORY SNAPSHOTS
+
+   IMPORTANT:
+   Sales are summed across the complete interval between
+   inventory snapshots rather than requiring an exact
+   snapshot-date match.
+
+   This prevents missing sales when inventory snapshots
+   are several days apart.
    ========================================================= */
 
 sold_by_store AS (
 
     SELECT
 
-        ibs.product_id,
+        i.product_id,
 
-        ibs.store_id,
+        i.inventory_snapshot_date,
 
-        ibs.inventory_snapshot_date,
+        sbd.store_id,
 
         SUM(
-            COALESCE(
-                sbd.sold_quantity,
-                0
-            )
+            sbd.sold_quantity
         ) AS sold_quantity
 
-    FROM inventory_by_store ibs
+    FROM inventory i
 
-    LEFT JOIN sold_by_store_daily sbd
+    INNER JOIN sold_by_store_daily sbd
 
         ON UPPER(
             TRIM(
-                ibs.product_id
+                i.product_id
             )
         ) = sbd.product_id
 
-       AND UPPER(
-            TRIM(
-                ibs.store_id
-            )
-        ) = sbd.store_id
-
        AND (
-            ibs.inventory_previous_snapshot_date IS NULL
-            OR sbd.sold_date >
-               ibs.inventory_previous_snapshot_date
+            i.inventory_previous_snapshot_date IS NULL
+
+            OR
+
+            sbd.sold_date >
+            i.inventory_previous_snapshot_date
        )
 
        AND sbd.sold_date <=
-           ibs.inventory_snapshot_date
+           i.inventory_snapshot_date
 
     GROUP BY
 
-        ibs.product_id,
+        i.product_id,
 
-        ibs.store_id,
+        i.inventory_snapshot_date,
 
-        ibs.inventory_snapshot_date
+        sbd.store_id
+
+),
+
+
+/* =========================================================
+   INVENTORY + REAL STORE SALES
+
+   Keeps every inventory product-date from silver_inventory.
+
+   If a product had no completed sale during the interval,
+   store_id and sold_quantity will be NULL.
+
+   No artificial product × store combinations are created.
+   ========================================================= */
+
+joined AS (
+
+    SELECT
+
+        i.product_id,
+
+        i.inventory_snapshot_date,
+
+        sb.store_id,
+
+
+        /* =================================================
+           INVENTORY MEASURES
+           ================================================= */
+
+        i.beginning_inventory,
+
+        i.inventory_purchased_quantity,
+
+        sb.sold_quantity,
+
+        i.ending_inventory
+
+    FROM inventory i
+
+    LEFT JOIN sold_by_store sb
+
+        ON UPPER(
+            TRIM(
+                i.product_id
+            )
+        ) = UPPER(
+            TRIM(
+                sb.product_id
+            )
+        )
+
+       AND i.inventory_snapshot_date =
+           sb.inventory_snapshot_date
 
 ),
 
 
 /* =========================================================
    TOTAL PURCHASED QUANTITY BY SNAPSHOT DATE
+
+   Used as denominator for Supplier Contribution %.
+
+   Negative purchased values are clamped to zero.
    ========================================================= */
 
 daily_total_purchased AS (
@@ -224,7 +256,7 @@ daily_total_purchased AS (
 
 
 /* =========================================================
-   PURCHASED QUANTITY BY SUPPLIER AND SNAPSHOT DATE
+   PURCHASED QUANTITY BY SUPPLIER + SNAPSHOT DATE
    ========================================================= */
 
 daily_supplier_purchased AS (
@@ -272,19 +304,19 @@ daily_supplier_purchased AS (
    JOIN ALL DIMENSIONS
    ========================================================= */
 
-joined AS (
+with_dims AS (
 
     SELECT
 
         /* =================================================
-           Natural Keys
+           NATURAL KEYS
            ================================================= */
 
-        ibs.product_id,
+        j.product_id,
 
-        ibs.store_id,
+        j.store_id,
 
-        ibs.inventory_snapshot_date,
+        j.inventory_snapshot_date,
 
 
         /* =================================================
@@ -307,10 +339,12 @@ joined AS (
 
         /* =================================================
            STORE DIMENSION
+
+           Store is now obtained only from an actual sale.
            ================================================= */
 
         CAST(
-            ibs.store_key AS VARCHAR
+            ds_store.store_key AS VARCHAR
         ) AS store_key,
 
 
@@ -319,7 +353,7 @@ joined AS (
            ================================================= */
 
         CAST(
-            ds.supplier_key AS VARCHAR
+            ds_supplier.supplier_key AS VARCHAR
         ) AS supplier_key,
 
 
@@ -332,21 +366,18 @@ joined AS (
 
         /* =================================================
            INVENTORY MEASURES
-
-           These names EXACTLY match the CSV.
            ================================================= */
 
-        ibs.beginning_inventory,
+        j.beginning_inventory,
 
-        ibs.inventory_purchased_quantity,
+        j.inventory_purchased_quantity,
 
         COALESCE(
-            sb.sold_quantity,
-            ibs.inventory_sold_quantity,
+            j.sold_quantity,
             0
         ) AS inventory_sold_quantity,
 
-        ibs.ending_inventory,
+        j.ending_inventory,
 
 
         /* =================================================
@@ -357,19 +388,19 @@ joined AS (
 
         CASE
 
-            WHEN ibs.ending_inventory IS NOT NULL
+            WHEN j.ending_inventory IS NOT NULL
 
              AND dp.cost_price IS NOT NULL
 
             THEN
-                ibs.ending_inventory
+                j.ending_inventory
                 * dp.cost_price
 
             ELSE NULL
 
         END AS inventory_value
 
-    FROM inventory_by_store ibs
+    FROM joined j
 
 
     /* =====================================================
@@ -380,7 +411,7 @@ joined AS (
 
         ON UPPER(
             TRIM(
-                ibs.product_id
+                j.product_id
             )
         ) = UPPER(
             TRIM(
@@ -395,7 +426,7 @@ joined AS (
 
     LEFT JOIN {{ ref('DIM_Date') }} dd
 
-        ON ibs.inventory_snapshot_date =
+        ON j.inventory_snapshot_date =
            dd.full_date
 
 
@@ -403,7 +434,7 @@ joined AS (
        SUPPLIER DIMENSION
        ===================================================== */
 
-    LEFT JOIN {{ ref('DIM_Supplier') }} ds
+    LEFT JOIN {{ ref('DIM_Supplier') }} ds_supplier
 
         ON UPPER(
             TRIM(
@@ -411,39 +442,26 @@ joined AS (
             )
         ) = UPPER(
             TRIM(
-                ds.supplier_id
+                ds_supplier.supplier_id
             )
         )
 
 
     /* =====================================================
-       STORE-SPECIFIC SALES
+       STORE DIMENSION
        ===================================================== */
 
-    LEFT JOIN sold_by_store sb
+    LEFT JOIN {{ ref('DIM_Store') }} ds_store
 
         ON UPPER(
             TRIM(
-                ibs.product_id
+                j.store_id
             )
         ) = UPPER(
             TRIM(
-                sb.product_id
+                ds_store.store_id
             )
         )
-
-       AND UPPER(
-            TRIM(
-                ibs.store_id
-            )
-        ) = UPPER(
-            TRIM(
-                sb.store_id
-            )
-        )
-
-       AND ibs.inventory_snapshot_date =
-           sb.inventory_snapshot_date
 
 ),
 
@@ -478,9 +496,15 @@ with_ratios AS (
                 /
                 (
                     (
-                        beginning_inventory
+                        COALESCE(
+                            beginning_inventory,
+                            0
+                        )
                         +
-                        ending_inventory
+                        COALESCE(
+                            ending_inventory,
+                            0
+                        )
                     ) / 2.0
                 )
 
@@ -488,13 +512,13 @@ with_ratios AS (
 
         END AS stock_turnover_ratio
 
-    FROM joined
+    FROM with_dims
 
 )
 
 
 /* =========================================================
-   FINAL FACT INVENTORY
+   FINAL FACT_INVENTORY
    ========================================================= */
 
 SELECT
@@ -587,7 +611,7 @@ FROM with_ratios wr
 
 
 /* =========================================================
-   TOTAL PURCHASED BY DATE
+   TOTAL PURCHASED BY SNAPSHOT DATE
    ========================================================= */
 
 LEFT JOIN daily_total_purchased dtp
@@ -597,7 +621,7 @@ LEFT JOIN daily_total_purchased dtp
 
 
 /* =========================================================
-   SUPPLIER PURCHASED BY DATE
+   SUPPLIER PURCHASED BY SNAPSHOT DATE
    ========================================================= */
 
 LEFT JOIN daily_supplier_purchased dsp
