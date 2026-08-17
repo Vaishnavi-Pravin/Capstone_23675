@@ -14,15 +14,11 @@ cleaned AS (
 
     SELECT
 
-        -------------------------------------------------
-        -- Keys
-        -------------------------------------------------
+
 
         campaign_id,
 
-        -------------------------------------------------
-        -- Campaign Details
-        -------------------------------------------------
+
 
         INITCAP(
             TRIM(raw_data:campaign_name::STRING)
@@ -40,9 +36,7 @@ cleaned AS (
             raw_data:description::STRING
         ) AS description,
 
-        -------------------------------------------------
-        -- Campaign Dates
-        -------------------------------------------------
+
 
         TRY_TO_TIMESTAMP_NTZ(
             TRIM(raw_data:start_date::STRING)
@@ -71,13 +65,7 @@ cleaned AS (
 
         ) AS last_modified_date,
 
-        -------------------------------------------------
-        -- Currency Fields
-        --
-        -- Source examples:
-        -- "$24,005.75"
-        -- "$12,210.23"
-        -------------------------------------------------
+
 
         TRY_TO_DECIMAL(
             REGEXP_REPLACE(
@@ -109,17 +97,13 @@ cleaned AS (
             2
         ) AS total_revenue,
 
-        -------------------------------------------------
-        -- Target Audience
-        -------------------------------------------------
+
 
         TRIM(
             raw_data:target_audience::STRING
         ) AS target_audience,
 
-        -------------------------------------------------
-        -- Metadata
-        -------------------------------------------------
+
 
         loaded_at,
 
@@ -141,15 +125,7 @@ demographics AS (
 
         *,
 
-        -------------------------------------------------
-        -- Audience Demographic
-        --
-        -- Examples:
-        -- Students
-        -- Families
-        -- Professionals
-        -- Seniors
-        -------------------------------------------------
+
 
         TRIM(
             SPLIT_PART(
@@ -159,15 +135,7 @@ demographics AS (
             )
         ) AS audience_group,
 
-        -------------------------------------------------
-        -- Age Band
-        --
-        -- Examples:
-        -- 18-25
-        -- 25-50
-        -- 30-50
-        -- 60+
-        -------------------------------------------------
+
 
         TRIM(
             SPLIT_PART(
@@ -177,15 +145,7 @@ demographics AS (
             )
         ) AS audience_age_band,
 
-        -------------------------------------------------
-        -- Geographic / Location Segment
-        --
-        -- Examples:
-        -- Campus
-        -- Suburban
-        -- Urban
-        -- All Areas
-        -------------------------------------------------
+
 
         TRIM(
             SPLIT_PART(
@@ -203,9 +163,7 @@ final AS (
 
     SELECT
 
-        -------------------------------------------------
-        -- Campaign
-        -------------------------------------------------
+
 
         campaign_id,
 
@@ -217,9 +175,7 @@ final AS (
 
         description,
 
-        -------------------------------------------------
-        -- Dates
-        -------------------------------------------------
+
 
         start_date,
 
@@ -227,11 +183,6 @@ final AS (
 
         last_modified_date,
 
-        -------------------------------------------------
-        -- Campaign Duration
-        --
-        -- Number of calendar days between start and end.
-        -------------------------------------------------
 
         CASE
 
@@ -249,11 +200,7 @@ final AS (
 
         END AS campaign_duration_days,
 
-        -------------------------------------------------
-        -- Financials
-        --
-        -- All normalized to numeric USD values.
-        -------------------------------------------------
+
 
         budget,
 
@@ -261,9 +208,7 @@ final AS (
 
         total_revenue,
 
-        -------------------------------------------------
-        -- Demographics
-        -------------------------------------------------
+
 
         target_audience,
 
@@ -277,12 +222,7 @@ final AS (
             audience_location
         ) AS audience_location,
 
-        -------------------------------------------------
-        -- Combined Demographic Segment
-        --
-        -- Example:
-        -- Students | 18-25 | Campus
-        -------------------------------------------------
+
 
         CONCAT_WS(
             ' | ',
@@ -300,9 +240,7 @@ final AS (
             )
         ) AS demographic_segment,
 
-        -------------------------------------------------
-        -- Metadata
-        -------------------------------------------------
+
 
         loaded_at,
 

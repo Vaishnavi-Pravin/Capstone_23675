@@ -14,15 +14,11 @@ store_clean AS (
 
     SELECT
 
-        -------------------------------------------------
-        -- Keys
-        -------------------------------------------------
+
 
         store_id,
 
-        -------------------------------------------------
-        -- Basic Store Details
-        -------------------------------------------------
+
 
         INITCAP(
             TRIM(raw_data:store_name::STRING)
@@ -40,9 +36,6 @@ store_clean AS (
             raw_data:manager_id::STRING
         ) AS manager_id,
 
-        -------------------------------------------------
-        -- Dates
-        -------------------------------------------------
 
         COALESCE(
 
@@ -82,9 +75,6 @@ store_clean AS (
 
         ) AS last_modified_date,
 
-        -------------------------------------------------
-        -- Financial / Operational Metrics
-        -------------------------------------------------
 
         TRY_TO_DECIMAL(
             raw_data:current_sales::STRING,
@@ -114,9 +104,6 @@ store_clean AS (
 
         raw_data:is_active::BOOLEAN AS is_active,
 
-        -------------------------------------------------
-        -- Address Standardization
-        -------------------------------------------------
 
         INITCAP(
             TRIM(raw_data:address:street::STRING)
@@ -138,9 +125,7 @@ store_clean AS (
             TRIM(raw_data:address:zip_code::STRING)
         ) AS zip_code,
 
-        -------------------------------------------------
-        -- Standardized Full Address
-        -------------------------------------------------
+
 
         CONCAT_WS(
             ', ',
@@ -182,9 +167,7 @@ store_clean AS (
 
         ) AS full_address,
 
-        -------------------------------------------------
-        -- Contact
-        -------------------------------------------------
+  
 
         CASE
 
@@ -207,9 +190,6 @@ store_clean AS (
             ''
         ) AS phone_number,
 
-        -------------------------------------------------
-        -- Operating Hours
-        -------------------------------------------------
 
         TRIM(
             raw_data:operating_hours:weekdays::STRING
@@ -223,18 +203,14 @@ store_clean AS (
             raw_data:operating_hours:holidays::STRING
         ) AS holidays,
 
-        -------------------------------------------------
-        -- Services
-        -------------------------------------------------
+      
 
         ARRAY_TO_STRING(
             raw_data:services,
             ', '
         ) AS services,
 
-        -------------------------------------------------
-        -- Metadata
-        -------------------------------------------------
+      
 
         loaded_at,
 
@@ -254,9 +230,7 @@ store_final AS (
 
     SELECT
 
-        -------------------------------------------------
-        -- Basic Fields
-        -------------------------------------------------
+    
 
         store_id,
 
@@ -308,13 +282,7 @@ store_final AS (
 
         services,
 
-        -------------------------------------------------
-        -- Store Size Category
-        --
-        -- < 5000      = Small
-        -- 5000-10000  = Medium
-        -- > 10000     = Large
-        -------------------------------------------------
+  
 
         CASE
 
@@ -335,11 +303,7 @@ store_final AS (
 
         END AS store_size_category,
 
-        -------------------------------------------------
-        -- Store Age
-        --
-        -- Calculate completed years since opening.
-        -------------------------------------------------
+
 
         CASE
 
@@ -375,11 +339,7 @@ store_final AS (
 
         END AS store_age_years,
 
-        -------------------------------------------------
-        -- Sales Target Achievement %
-        --
-        -- Guard against zero/null target.
-        -------------------------------------------------
+  
 
         CASE
 
@@ -398,11 +358,7 @@ store_final AS (
 
         END AS sales_target_achievement_percentage,
 
-        -------------------------------------------------
-        -- Revenue Per Square Foot
-        --
-        -- Guard against zero/null square footage.
-        -------------------------------------------------
+   
 
         CASE
 
@@ -419,11 +375,7 @@ store_final AS (
 
         END AS revenue_per_sq_ft,
 
-        -------------------------------------------------
-        -- Employee Efficiency
-        --
-        -- Guard against zero/null employees.
-        -------------------------------------------------
+ 
 
         CASE
 
@@ -440,12 +392,7 @@ store_final AS (
 
         END AS employee_efficiency,
 
-        -------------------------------------------------
-        -- Performance Issue Flag
-        --
-        -- Requirement:
-        -- Flag stores with achievement < 90%
-        -------------------------------------------------
+ 
 
         CASE
 
@@ -462,9 +409,7 @@ store_final AS (
 
         END AS performance_issue_flag,
 
-        -------------------------------------------------
-        -- Metadata
-        -------------------------------------------------
+
 
         loaded_at,
 

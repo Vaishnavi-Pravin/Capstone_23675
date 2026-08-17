@@ -14,17 +14,11 @@ cleaned AS (
 
     SELECT
 
-        -------------------------------------------------
-        -- Keys
-        -------------------------------------------------
+
 
         product_id,
 
-        -------------------------------------------------
-        -- Product Details
-        --
-        -- Pascal Case normalization
-        -------------------------------------------------
+
 
         INITCAP(
             TRIM(raw_data:name::STRING)
@@ -70,9 +64,7 @@ cleaned AS (
             raw_data:supplier_id::STRING
         ) AS supplier_id,
 
-        -------------------------------------------------
-        -- Description
-        -------------------------------------------------
+
 
         TRIM(
             raw_data:short_description::STRING
@@ -82,12 +74,7 @@ cleaned AS (
             raw_data:technical_specs::STRING
         ) AS technical_specs,
 
-        -------------------------------------------------
-        -- Full Product Description
-        --
-        -- Requirement:
-        -- name | short_description | technical_specs
-        -------------------------------------------------
+
 
         CONCAT_WS(
             ' | ',
@@ -115,9 +102,7 @@ cleaned AS (
 
         ) AS full_description,
 
-        -------------------------------------------------
-        -- Prices
-        -------------------------------------------------
+
 
         TRY_TO_DECIMAL(
             raw_data:unit_price::STRING,
@@ -131,9 +116,7 @@ cleaned AS (
             2
         ) AS cost_price,
 
-        -------------------------------------------------
-        -- Inventory
-        -------------------------------------------------
+
 
         TRY_TO_NUMBER(
             raw_data:stock_quantity::STRING
@@ -143,9 +126,7 @@ cleaned AS (
             raw_data:reorder_level::STRING
         ) AS reorder_level,
 
-        -------------------------------------------------
-        -- Dates
-        -------------------------------------------------
+
 
         COALESCE(
 
@@ -185,15 +166,11 @@ cleaned AS (
 
         ) AS last_modified_date,
 
-        -------------------------------------------------
-        -- Flags
-        -------------------------------------------------
+
 
         raw_data:is_featured::BOOLEAN AS is_featured,
 
-        -------------------------------------------------
-        -- Metadata
-        -------------------------------------------------
+
 
         loaded_at,
 
@@ -215,11 +192,7 @@ final AS (
 
         *,
 
-        -------------------------------------------------
-        -- Category Hierarchy
-        --
-        -- category > subcategory > product_line
-        -------------------------------------------------
+
 
         CONCAT_WS(
             ' > ',
@@ -230,14 +203,7 @@ final AS (
 
         ) AS category_hierarchy,
 
-        -------------------------------------------------
-        -- Profit Margin Percentage
-        --
-        -- Formula:
-        -- ((unit_price - cost_price) / unit_price) * 100
-        --
-        -- Guard against zero/null unit price
-        -------------------------------------------------
+ 
 
         CASE
 
@@ -257,12 +223,7 @@ final AS (
 
         END AS profit_margin_percentage,
 
-        -------------------------------------------------
-        -- Low Stock Flag
-        --
-        -- Requirement:
-        -- stock_quantity < reorder_level
-        -------------------------------------------------
+  
 
         CASE
 

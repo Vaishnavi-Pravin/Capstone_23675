@@ -18,9 +18,7 @@ WITH active_orders AS (
 
 ),
 
-/* =========================================================
-   Extract required order-level attributes
-========================================================= */
+
 
 order_details AS (
 
@@ -83,9 +81,6 @@ order_details AS (
 
 ),
 
-/* =========================================================
-   Expand individual order items
-========================================================= */
 
 flattened_items AS (
 
@@ -116,9 +111,6 @@ flattened_items AS (
 
 ),
 
-/* =========================================================
-   Summarize order-item information at order level
-========================================================= */
 
 order_level_summary AS (
 
@@ -131,11 +123,6 @@ order_level_summary AS (
 
         SUM(quantity)
             AS total_quantity,
-
-        /*
-           Source item discount is represented as a percentage.
-           Convert percentage to a fraction before applying it.
-        */
 
         SUM(
             quantity
@@ -162,9 +149,6 @@ order_level_summary AS (
 
 ),
 
-/* =========================================================
-   Merge order-level and item-level calculations
-========================================================= */
 
 order_summary AS (
 
@@ -223,9 +207,6 @@ order_summary AS (
 
 ),
 
-/* =========================================================
-   Derive order profit
-========================================================= */
 
 order_profit AS (
 
@@ -252,9 +233,6 @@ order_profit AS (
 
 )
 
-/* =========================================================
-   Final Silver output
-========================================================= */
 
 SELECT
 
@@ -278,9 +256,6 @@ SELECT
 
     order_date,
 
-    /* =====================================================
-       Categorize order based on hour of day
-    ===================================================== */
 
     CASE
 
@@ -300,9 +275,6 @@ SELECT
 
     END AS order_time_of_day,
 
-    /* =====================================================
-       Calendar attributes
-    ===================================================== */
 
     WEEK(order_date)
         AS order_week,
@@ -316,9 +288,6 @@ SELECT
     YEAR(order_date)
         AS order_year,
 
-    /* =====================================================
-       Aggregated item metrics
-    ===================================================== */
 
     total_items,
 
@@ -330,15 +299,9 @@ SELECT
 
     total_discount,
 
-    /* =====================================================
-       Order-level discount
-    ===================================================== */
 
     order_discount_amount,
 
-    /* =====================================================
-       Profit calculation
-    ===================================================== */
 
     profit_amount,
 
@@ -353,9 +316,6 @@ SELECT
 
     END AS profit_margin_percentage,
 
-    /* =====================================================
-       Shipping performance
-    ===================================================== */
 
     CASE
 
@@ -387,9 +347,6 @@ SELECT
 
     END AS shipping_days,
 
-    /* =====================================================
-       Determine delivery status
-    ===================================================== */
 
     CASE
 
@@ -412,9 +369,6 @@ SELECT
 
     END AS delivery_status,
 
-    /* =====================================================
-       Source metadata
-    ===================================================== */
 
     loaded_at,
     source_file,

@@ -13,11 +13,10 @@ WITH campaign_performance AS (
         dc.campaign_name,
         dc.campaign_type,
 
-        /* Campaign financial attributes */
+
         dc.total_cost,
         dc.total_revenue,
 
-        /* Total sales influenced by the campaign */
         SUM(
             COALESCE(
                 fm.total_sales_influenced,
@@ -25,7 +24,7 @@ WITH campaign_performance AS (
             )
         ) AS total_sales_influenced,
 
-        /* New customers acquired */
+ 
         SUM(
             COALESCE(
                 fm.new_customers_acquired,
@@ -33,12 +32,7 @@ WITH campaign_performance AS (
             )
         ) AS new_customers_acquired,
 
-        /*
-           Repeat purchase rate:
-           The fact contains a cumulative rate for each
-           campaign activity date, so MAX gives the latest
-           cumulative campaign rate.
-        */
+     
         MAX(
             fm.repeat_purchase_rate
         ) AS repeat_purchase_rate
@@ -86,13 +80,7 @@ final AS (
 
         repeat_purchase_rate,
 
-        /*
-           Campaign ROI
 
-           ROI =
-           (Sales Influenced - Campaign Cost)
-           / Campaign Cost × 100
-        */
 
         CASE
 

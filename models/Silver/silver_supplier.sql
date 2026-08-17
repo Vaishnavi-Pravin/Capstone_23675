@@ -17,33 +17,25 @@ supplier_cleaned AS (
 
     SELECT
 
-        -------------------------------------------------
-        -- Natural Key
-        -------------------------------------------------
+ 
 
         TRIM(
             supplier_id
         ) AS supplier_id,
 
-        -------------------------------------------------
-        -- Supplier Name
-        -------------------------------------------------
+
 
         INITCAP(
             TRIM(raw_data:supplier_name::STRING)
         ) AS supplier_name,
 
-        -------------------------------------------------
-        -- Supplier Type
-        -------------------------------------------------
+   
 
         INITCAP(
             TRIM(raw_data:supplier_type::STRING)
         ) AS supplier_type,
 
-        -------------------------------------------------
-        -- Contact Information
-        -------------------------------------------------
+     
 
         INITCAP(
             TRIM(
@@ -71,9 +63,7 @@ supplier_cleaned AS (
             )
         ) AS address,
 
-        -------------------------------------------------
-        -- Payment Terms
-        -------------------------------------------------
+     
 
         UPPER(
             TRIM(
@@ -81,9 +71,7 @@ supplier_cleaned AS (
             )
         ) AS payment_terms,
 
-        -------------------------------------------------
-        -- Additional Supplier Attributes
-        -------------------------------------------------
+ 
 
         TRIM(
             raw_data:tax_id::STRING
@@ -118,9 +106,6 @@ supplier_cleaned AS (
             )
         ) AS credit_rating,
 
-        -------------------------------------------------
-        -- Dates
-        -------------------------------------------------
 
         TRY_TO_DATE(
             raw_data:last_modified_date::STRING,
@@ -142,9 +127,7 @@ supplier_cleaned AS (
             'YYYY-MM-DD'
         ) AS contract_end_date,
 
-        -------------------------------------------------
-        -- Contract Information
-        -------------------------------------------------
+   
 
         TRIM(
             raw_data:contract_details:contract_id::STRING
@@ -156,18 +139,14 @@ supplier_cleaned AS (
         raw_data:contract_details:renewal_option::BOOLEAN
             AS contract_renewal_option,
 
-        -------------------------------------------------
-        -- Supplier Categories
-        -------------------------------------------------
+       
 
         ARRAY_TO_STRING(
             raw_data:categories_supplied,
             ', '
         ) AS categories_supplied,
 
-        -------------------------------------------------
-        -- Performance Metrics
-        -------------------------------------------------
+ 
 
         TRY_TO_DECIMAL(
             raw_data:performance_metrics:average_delay_days::STRING,
@@ -205,9 +184,7 @@ supplier_cleaned AS (
             2
         ) AS returns_percentage,
 
-        -------------------------------------------------
-        -- Metadata
-        -------------------------------------------------
+       
 
         loaded_at,
 
@@ -227,9 +204,7 @@ final AS (
 
     SELECT
 
-        -------------------------------------------------
-        -- Gold DIM_Supplier fields
-        -------------------------------------------------
+  
 
         supplier_id,
 
@@ -247,9 +222,7 @@ final AS (
 
         payment_terms,
 
-        -------------------------------------------------
-        -- Additional Supplier Attributes
-        -------------------------------------------------
+    
 
         tax_id,
 
@@ -293,9 +266,7 @@ final AS (
 
         returns_percentage,
 
-        -------------------------------------------------
-        -- Metadata
-        -------------------------------------------------
+    
 
         loaded_at,
 

@@ -7,16 +7,10 @@ WITH campaign_sales AS (
 
     SELECT
 
-        /* =================================================
-           Campaign Key
-           ================================================= */
 
         fm.campaign_key,
 
 
-        /* =================================================
-           Campaign Details
-           ================================================= */
 
         dc.campaign_id,
 
@@ -27,9 +21,7 @@ WITH campaign_sales AS (
         dc.channel,
 
 
-        /* =================================================
-           Total Sales Influenced by Campaign
-           ================================================= */
+
 
         SUM(
             COALESCE(
@@ -39,9 +31,7 @@ WITH campaign_sales AS (
         ) AS total_sales_influenced,
 
 
-        /* =================================================
-           New Customers Acquired
-           ================================================= */
+
 
         SUM(
             COALESCE(

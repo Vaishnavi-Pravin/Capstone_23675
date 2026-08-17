@@ -7,9 +7,6 @@ WITH campaign_engagement AS (
 
     SELECT
 
-        /* =================================================
-           Campaign
-           ================================================= */
 
         fm.campaign_key,
 
@@ -22,9 +19,7 @@ WITH campaign_engagement AS (
         dc.channel,
 
 
-        /* =================================================
-           New Customers
-           ================================================= */
+
 
         SUM(
             COALESCE(
@@ -32,11 +27,6 @@ WITH campaign_engagement AS (
                 0
             )
         ) AS new_customers,
-
-
-        /* =================================================
-           Sales Influenced
-           ================================================= */
 
         SUM(
             COALESCE(
@@ -46,12 +36,7 @@ WITH campaign_engagement AS (
         ) AS total_sales_influenced,
 
 
-        /* =================================================
-           Repeat Purchase Rate
 
-           Fact contains the cumulative rate by campaign
-           activity date. MAX gets the latest rate.
-           ================================================= */
 
         MAX(
             fm.repeat_purchase_rate

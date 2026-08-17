@@ -21,18 +21,13 @@ final AS (
         /* Natural Key */
         supplier_id,
 
-        -------------------------------------------------
-        -- Supplier Details
-        -------------------------------------------------
+
 
         supplier_name,
 
         supplier_type,
 
-        -------------------------------------------------
-        -- Contact Information
-        -- Silver stores these as separate fields
-        -------------------------------------------------
+
 
         contact_person,
 
@@ -42,9 +37,7 @@ final AS (
 
         address,
 
-        -------------------------------------------------
-        -- Payment Terms
-        -------------------------------------------------
+
 
         payment_terms,
 

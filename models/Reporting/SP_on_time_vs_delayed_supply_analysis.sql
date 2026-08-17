@@ -3,17 +3,6 @@
     schema='REPORTING'
 ) }}
 
-/* =========================================================
-   SUPPLIER PERFORMANCE ANALYSIS
-
-   SOURCE:
-   dim_supplier
-
-   LOGIC:
-   - Calculate delayed rate from on-time delivery rate
-   - Classify suppliers into performance tiers
-   - Order suppliers by on-time delivery performance
-   ========================================================= */
 
 SELECT
 

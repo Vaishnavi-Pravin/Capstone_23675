@@ -3,41 +3,6 @@
     schema='GOLD'
 ) }}
 
-/* =========================================================
-   FACT_INVENTORY
-
-   GRAIN:
-   One row per PRODUCT + STORE + INVENTORY SNAPSHOT DATE
-   ONLY when a real completed sale occurred for that
-   product/store during the inventory snapshot interval.
-
-   SOURCE:
-   silver_inventory
-
-   DIMENSIONS:
-   - DIM_Product
-   - DIM_Store
-   - DIM_Supplier
-   - DIM_Date
-
-   IMPORTANT:
-   No CROSS JOIN is used.
-
-   Store rows are created only when a real completed sale
-   occurred for the product during:
-
-       inventory_previous_snapshot_date
-       <
-       sold_date
-       <=
-       inventory_snapshot_date
-
-   Inventory quantities remain product/company-level because
-   the source does not contain actual store-level inventory
-   quantities.
-   ========================================================= */
-
-
 WITH inventory AS (
 
     SELECT *
@@ -47,9 +12,6 @@ WITH inventory AS (
 ),
 
 
-/* =========================================================
-   DAILY COMPLETED SALES BY PRODUCT AND STORE
-   ========================================================= */
 
 sold_by_store_daily AS (
 
@@ -110,17 +72,7 @@ sold_by_store_daily AS (
 ),
 
 
-/* =========================================================
-   SALES BETWEEN INVENTORY SNAPSHOTS
 
-   IMPORTANT:
-   Sales are summed across the complete interval between
-   inventory snapshots rather than requiring an exact
-   snapshot-date match.
-
-   This prevents missing sales when inventory snapshots
-   are several days apart.
-   ========================================================= */
 
 sold_by_store AS (
 
@@ -169,17 +121,6 @@ sold_by_store AS (
 ),
 
 
-/* =========================================================
-   INVENTORY + REAL STORE SALES
-
-   Keeps every inventory product-date from silver_inventory.
-
-   If a product had no completed sale during the interval,
-   store_id and sold_quantity will be NULL.
-
-   No artificial product × store combinations are created.
-   ========================================================= */
-
 joined AS (
 
     SELECT
@@ -189,11 +130,6 @@ joined AS (
         i.inventory_snapshot_date,
 
         sb.store_id,
-
-
-        /* =================================================
-           INVENTORY MEASURES
-           ================================================= */
 
         i.beginning_inventory,
 
@@ -223,13 +159,6 @@ joined AS (
 ),
 
 
-/* =========================================================
-   TOTAL PURCHASED QUANTITY BY SNAPSHOT DATE
-
-   Used as denominator for Supplier Contribution %.
-
-   Negative purchased values are clamped to zero.
-   ========================================================= */
 
 daily_total_purchased AS (
 
@@ -255,9 +184,7 @@ daily_total_purchased AS (
 ),
 
 
-/* =========================================================
-   PURCHASED QUANTITY BY SUPPLIER + SNAPSHOT DATE
-   ========================================================= */
+
 
 daily_supplier_purchased AS (
 
@@ -300,17 +227,12 @@ daily_supplier_purchased AS (
 ),
 
 
-/* =========================================================
-   JOIN ALL DIMENSIONS
-   ========================================================= */
+
 
 with_dims AS (
 
     SELECT
 
-        /* =================================================
-           NATURAL KEYS
-           ================================================= */
 
         j.product_id,
 
@@ -319,54 +241,40 @@ with_dims AS (
         j.inventory_snapshot_date,
 
 
-        /* =================================================
-           PRODUCT DIMENSION
-           ================================================= */
+
 
         CAST(
             dp.product_key AS VARCHAR
         ) AS product_key,
 
 
-        /* =================================================
-           DATE DIMENSION
-           ================================================= */
+
 
         CAST(
             dd.date_key AS VARCHAR
         ) AS date_key,
 
 
-        /* =================================================
-           STORE DIMENSION
 
-           Store is now obtained only from an actual sale.
-           ================================================= */
 
         CAST(
             ds_store.store_key AS VARCHAR
         ) AS store_key,
 
 
-        /* =================================================
-           SUPPLIER DIMENSION
-           ================================================= */
+
 
         CAST(
             ds_supplier.supplier_key AS VARCHAR
         ) AS supplier_key,
 
 
-        /* =================================================
-           SUPPLIER NATURAL KEY
-           ================================================= */
+
 
         dp.supplier_id,
 
 
-        /* =================================================
-           INVENTORY MEASURES
-           ================================================= */
+
 
         j.beginning_inventory,
 
@@ -380,11 +288,7 @@ with_dims AS (
         j.ending_inventory,
 
 
-        /* =================================================
-           INVENTORY VALUE
 
-           Ending inventory × product cost price
-           ================================================= */
 
         CASE
 
@@ -403,9 +307,7 @@ with_dims AS (
     FROM joined j
 
 
-    /* =====================================================
-       PRODUCT DIMENSION
-       ===================================================== */
+
 
     LEFT JOIN {{ ref('DIM_Product') }} dp
 
@@ -420,9 +322,7 @@ with_dims AS (
         )
 
 
-    /* =====================================================
-       DATE DIMENSION
-       ===================================================== */
+
 
     LEFT JOIN {{ ref('DIM_Date') }} dd
 
@@ -430,9 +330,7 @@ with_dims AS (
            dd.full_date
 
 
-    /* =====================================================
-       SUPPLIER DIMENSION
-       ===================================================== */
+
 
     LEFT JOIN {{ ref('DIM_Supplier') }} ds_supplier
 
@@ -447,9 +345,7 @@ with_dims AS (
         )
 
 
-    /* =====================================================
-       STORE DIMENSION
-       ===================================================== */
+
 
     LEFT JOIN {{ ref('DIM_Store') }} ds_store
 
@@ -466,9 +362,7 @@ with_dims AS (
 ),
 
 
-/* =========================================================
-   STOCK TURNOVER RATIO
-   ========================================================= */
+
 
 with_ratios AS (
 
@@ -517,15 +411,10 @@ with_ratios AS (
 )
 
 
-/* =========================================================
-   FINAL FACT_INVENTORY
-   ========================================================= */
+
 
 SELECT
 
-    /* =====================================================
-       INVENTORY SURROGATE KEY
-       ===================================================== */
 
     CAST(
         {{ dbt_utils.generate_surrogate_key(
@@ -539,9 +428,7 @@ SELECT
     ) AS inventory_key,
 
 
-    /* =====================================================
-       DIMENSION KEYS
-       ===================================================== */
+
 
     CAST(
         product_key AS VARCHAR
@@ -560,9 +447,7 @@ SELECT
     ) AS supplier_key,
 
 
-    /* =====================================================
-       INVENTORY MEASURES
-       ===================================================== */
+
 
     beginning_inventory,
 
@@ -577,9 +462,7 @@ SELECT
     stock_turnover_ratio,
 
 
-    /* =====================================================
-       SUPPLIER CONTRIBUTION %
-       ===================================================== */
+
 
     ROUND(
 
@@ -610,9 +493,7 @@ SELECT
 FROM with_ratios wr
 
 
-/* =========================================================
-   TOTAL PURCHASED BY SNAPSHOT DATE
-   ========================================================= */
+
 
 LEFT JOIN daily_total_purchased dtp
 
@@ -620,9 +501,7 @@ LEFT JOIN daily_total_purchased dtp
        dtp.inventory_snapshot_date
 
 
-/* =========================================================
-   SUPPLIER PURCHASED BY SNAPSHOT DATE
-   ========================================================= */
+
 
 LEFT JOIN daily_supplier_purchased dsp
 

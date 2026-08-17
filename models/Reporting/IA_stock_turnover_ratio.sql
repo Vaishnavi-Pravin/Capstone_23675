@@ -7,9 +7,7 @@ WITH turnover AS (
 
     SELECT
 
-        /* =====================================================
-           PRODUCT DIMENSION
-           ===================================================== */
+
 
         fi.product_key,
 
@@ -24,9 +22,7 @@ WITH turnover AS (
         dp.product_line,
 
 
-        /* =====================================================
-           STOCK TURNOVER RATIO
-           ===================================================== */
+
 
         
             AVG(
@@ -35,12 +31,7 @@ WITH turnover AS (
             AS stock_turnover_ratio,
 
 
-        /* =====================================================
-           TOTAL SOLD QUANTITY
 
-           FACT_INVENTORY uses:
-           inventory_sold_quantity
-           ===================================================== */
 
         SUM(
             COALESCE(
@@ -50,9 +41,6 @@ WITH turnover AS (
         ) AS total_sold_quantity,
 
 
-        /* =====================================================
-           AVERAGE INVENTORY
-           ===================================================== */
 
         AVG(
             (
@@ -72,24 +60,12 @@ WITH turnover AS (
     FROM {{ ref('FACT_Inventory') }} fi
 
 
-    /* =====================================================
-       PRODUCT DIMENSION JOIN
-
-       Both FACT_Inventory and DIM_Product use:
-
-       dbt_utils.generate_surrogate_key(['product_id'])
-
-       Therefore product_key can be joined directly.
-       ===================================================== */
-
     LEFT JOIN {{ ref('DIM_Product') }} dp
 
         ON fi.product_key = dp.product_key
 
 
-    /* =====================================================
-       GROUP BY PRODUCT
-       ===================================================== */
+
 
     GROUP BY
 

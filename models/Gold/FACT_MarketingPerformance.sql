@@ -54,10 +54,7 @@ campaign_orders AS (
  
 ),
  
-/* Bring in campaign window bounds to guard against any order
-   whose campaign_id is set but whose order_date falls outside
-   that campaign's declared active window (data quality check,
-   mirrors the doc's BETWEEN StartDate AND EndDate condition). */
+
  
 campaign_orders_bounded AS (
  
@@ -143,8 +140,7 @@ SELECT
     daily_sales_influenced AS total_sales_influenced,
     daily_new_customers AS new_customers_acquired,
  
-    /* Repeat Purchase Rate: cumulative repeat / cumulative first-purchase,
-       trending as the campaign progresses. Guarded against divide-by-zero. */
+
     CASE
         WHEN cumulative_first_purchase_customers > 0
         THEN ROUND(
@@ -153,9 +149,7 @@ SELECT
         )
         ELSE NULL
     END AS repeat_purchase_rate,
- 
-    /* ROI: cumulative sales influenced to date vs. fixed total campaign
-       cost, guarded against divide-by-zero. */
+
     CASE
         WHEN total_cost > 0
         THEN ROUND(

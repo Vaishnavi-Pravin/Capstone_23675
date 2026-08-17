@@ -14,15 +14,11 @@ cleaned AS (
 
     SELECT
 
-        -------------------------------------------------
-        -- Customer ID
-        -------------------------------------------------
+
 
         customer_id,
 
-        -------------------------------------------------
-        -- Name Standardization
-        -------------------------------------------------
+
 
         INITCAP(
             TRIM(raw_data:first_name::STRING)
@@ -32,11 +28,7 @@ cleaned AS (
             TRIM(raw_data:last_name::STRING)
         ) AS last_name,
 
-        -------------------------------------------------
-        -- Full Name
-        -- Requirement:
-        -- FirstName || ' ' || LastName
-        -------------------------------------------------
+
 
         CONCAT_WS(
             ' ',
@@ -50,24 +42,13 @@ cleaned AS (
             )
         ) AS full_name,
 
-        -------------------------------------------------
-        -- Email
-        -------------------------------------------------
+
 
         LOWER(
             TRIM(raw_data:email::STRING)
         ) AS email,
 
-        -------------------------------------------------
-        -- Email Validation
-        --
-        -- Valid example:
-        -- abc@gmail.com
-        --
-        -- Invalid examples from source:
-        -- bryan.diaz@
-        -- john.davidsonaticloud.com
-        -------------------------------------------------
+
 
         CASE
 
@@ -84,12 +65,7 @@ cleaned AS (
 
         END AS is_valid_email,
 
-        -------------------------------------------------
-        -- Phone Number Cleaning
-        --
-        -- Remove spaces, brackets, hyphens, dots,
-        -- plus sign and other formatting characters.
-        -------------------------------------------------
+
 
         REGEXP_REPLACE(
             TRIM(raw_data:phone::STRING),
@@ -97,14 +73,7 @@ cleaned AS (
             ''
         ) AS phone_number,
 
-        -------------------------------------------------
-        -- Phone Validation
-        --
-        -- Only accept phone values containing:
-        -- 10 to 15 digits
-        --
-        -- Invalid source examples contain X.
-        -------------------------------------------------
+
 
         CASE
 
@@ -128,14 +97,7 @@ cleaned AS (
 
         END AS is_valid_phone,
 
-        -------------------------------------------------
-        -- Birth Date
-        --
-        -- Source contains:
-        -- YYYY-MM-DD
-        -- DD-MM-YYYY
-        -- MM/DD/YYYY
-        -------------------------------------------------
+
 
         COALESCE(
 
@@ -156,9 +118,7 @@ cleaned AS (
 
         ) AS birth_date,
 
-        -------------------------------------------------
-        -- Registration Date
-        -------------------------------------------------
+
 
         COALESCE(
 
@@ -179,9 +139,7 @@ cleaned AS (
 
         ) AS registration_date,
 
-        -------------------------------------------------
-        -- Last Purchase Date
-        -------------------------------------------------
+
 
         COALESCE(
 
@@ -202,9 +160,7 @@ cleaned AS (
 
         ) AS last_purchase_date,
 
-        -------------------------------------------------
-        -- Last Modified Date
-        -------------------------------------------------
+
 
         COALESCE(
 
@@ -225,9 +181,7 @@ cleaned AS (
 
         ) AS last_modified_date,
 
-        -------------------------------------------------
-        -- Standardized Address
-        -------------------------------------------------
+
 
         INITCAP(
             TRIM(raw_data:address:street::STRING)
@@ -249,9 +203,7 @@ cleaned AS (
             raw_data:address:zip_code::STRING
         ) AS zip_code,
 
-        -------------------------------------------------
-        -- Full Standardized Address
-        -------------------------------------------------
+
 
         CONCAT_WS(
             ', ',
@@ -292,9 +244,7 @@ cleaned AS (
 
         ) AS full_address,
 
-        -------------------------------------------------
-        -- Other Customer Attributes
-        -------------------------------------------------
+
 
         INITCAP(
             TRIM(raw_data:occupation::STRING)
@@ -328,9 +278,7 @@ cleaned AS (
             2
         ) AS total_spend,
 
-        -------------------------------------------------
-        -- Metadata
-        -------------------------------------------------
+
 
         loaded_at,
 
@@ -352,12 +300,7 @@ with_age AS (
 
         *,
 
-        -------------------------------------------------
-        -- Age
-        --
-        -- Calculate completed years accurately by
-        -- checking whether birthday has occurred this year.
-        -------------------------------------------------
+
 
         CASE
 
@@ -397,14 +340,7 @@ final AS (
 
         *,
 
-        -------------------------------------------------
-        -- Customer Segmentation
-        --
-        -- Non-overlapping bands:
-        -- Young       = 18-35
-        -- Middle-aged = 36-55
-        -- Senior      = 56+
-        -------------------------------------------------
+
 
         CASE
 
