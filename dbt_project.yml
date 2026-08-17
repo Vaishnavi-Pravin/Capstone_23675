@@ -55,6 +55,5 @@ models:
        +schema: REPORTING
        +materialized: view  
 
-    Audit:
-       +schema: AUDIT
-       +materialized: table
+    Elementary:
+       +schema: ELEMENTARY
